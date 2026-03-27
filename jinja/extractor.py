@@ -179,6 +179,27 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
                     f"  {line}"
                 )
 
+    warnings.extend(_check_hyphenated_variables(lines))
+
+    return warnings
+
+
+def _check_hyphenated_variables(lines: list[str]) -> list[str]:
+    """Check for variables containing hyphens, which Jinja2 interprets as subtraction."""
+    warnings = []
+    for line_num, line in enumerate(lines, start=1):
+        for match in re.finditer(r"\{\{\s*([\w.\-]+)\s*\}\}", line):
+            var_name = match.group(1)
+            if "-" in var_name:
+                suggested_name = var_name.replace("-", "_")
+                warnings.append(
+                    f"Line {line_num}: Variable name contains hyphen(s)\n"
+                    f"  Found: {{{{{var_name}}}}}\n"
+                    f"  Fix:   {{{{{suggested_name}}}}}\n"
+                    f"  Reason: Jinja2 interprets hyphens as subtraction operators. "
+                    f"Use underscores instead.\n"
+                    f"  {line}"
+                )
     return warnings
 
 
@@ -256,7 +277,8 @@ def _tokenize_template(text: str) -> list[dict]:
         tokens.append({"type": "endfor", "pos": match.start()})
 
     # Find all variables
-    for match in re.finditer(r"\{\{\s*([\w.]+)(?:\s*\|[^}]*)?\s*\}\}", text):
+    # Include hyphens in variable names to detect them (even though Jinja2 interprets hyphens as subtraction)
+    for match in re.finditer(r"\{\{\s*([\w.\-]+)(?:\s*\|[^}]*)?\s*\}\}", text):
         var_name = match.group(1)
         tokens.append({"type": "variable", "var_name": var_name, "pos": match.start()})
 
