@@ -7,6 +7,10 @@ from conduit.server.core.logging import get_logger
 log = get_logger(__name__)
 
 
+# docxtpl adds row/cell/paragraph/run prefixes to Jinja tags, e.g. {%tr for ... %} or {{r ... }}
+_DOCXTPL_TAG_PREFIX = r"(?:tr|tc|p|r)"
+
+
 def validate_template_jinja(full_text: str) -> list[str]:
     """
     Validate Jinja2 syntax in a docx template.
@@ -207,8 +211,8 @@ def _check_mismatched_tags(full_text: str) -> list[str]:
     """Check for mismatched loop and conditional tags."""
     warnings = []
 
-    for_count = len(re.findall(r"\{%\s*for\s+", full_text))
-    endfor_count = len(re.findall(r"\{%\s*endfor\s*%\}", full_text))
+    for_count = len(re.findall(rf"\{{%{_DOCXTPL_TAG_PREFIX}?\s*for\s+", full_text))
+    endfor_count = len(re.findall(rf"\{{%{_DOCXTPL_TAG_PREFIX}?\s*endfor\s*%\}}", full_text))
     if for_count != endfor_count:
         warnings.append(
             f"Mismatched loop tags\n"
@@ -216,8 +220,8 @@ def _check_mismatched_tags(full_text: str) -> list[str]:
             f"  Fix: Each {{% for %}} must have a corresponding {{% endfor %}}"
         )
 
-    if_count = len(re.findall(r"\{%\s*if\s+", full_text))
-    endif_count = len(re.findall(r"\{%\s*endif\s*%\}", full_text))
+    if_count = len(re.findall(rf"\{{%{_DOCXTPL_TAG_PREFIX}?\s*if\s+", full_text))
+    endif_count = len(re.findall(rf"\{{%{_DOCXTPL_TAG_PREFIX}?\s*endif\s*%\}}", full_text))
     if if_count != endif_count:
         warnings.append(
             f"Mismatched conditional tags\n"
@@ -233,8 +237,13 @@ def _check_jinja_syntax(full_text: str) -> list[str]:
     warnings = []
     env = Environment()
 
+    # Strip docxtpl prefixes (tr/tc/p/r) from block and variable tags so the vanilla
+    # environment doesn't reject valid docxtpl directives like {%p if ... %} or {{r ... }}.
+    # Only the prefix is removed, so line numbers still map to full_text.
+    normalized = re.sub(rf"(\{{[%{{]){_DOCXTPL_TAG_PREFIX}?\s+", r"\1 ", full_text)
+
     try:
-        env.parse(full_text)
+        env.parse(normalized)
     except TemplateSyntaxError as e:
         error_msg = str(e)
         line_preview = ""
@@ -267,18 +276,18 @@ def _tokenize_template(text: str) -> list[dict]:
     tokens = []
 
     # Find all for loops
-    for match in re.finditer(r"\{%\s*for\s+(\w+)\s+in\s+([\w.]+)\s*%\}", text):
+    for match in re.finditer(rf"\{{%{_DOCXTPL_TAG_PREFIX}?\s*for\s+(\w+)\s+in\s+([\w.]+)\s*%\}}", text):
         loop_item = match.group(1)
         loop_var = match.group(2)
         tokens.append({"type": "for", "loop_item": loop_item, "loop_var": loop_var, "pos": match.start()})
 
     # Find all endfor
-    for match in re.finditer(r"\{%\s*endfor\s*%\}", text):
+    for match in re.finditer(rf"\{{%{_DOCXTPL_TAG_PREFIX}?\s*endfor\s*%\}}", text):
         tokens.append({"type": "endfor", "pos": match.start()})
 
     # Find all variables
     # Include hyphens in variable names to detect them (even though Jinja2 interprets hyphens as subtraction)
-    for match in re.finditer(r"\{\{\s*([\w.\-]+)(?:\s*\|[^}]*)?\s*\}\}", text):
+    for match in re.finditer(rf"\{{\{{(?:{_DOCXTPL_TAG_PREFIX}\s+)?\s*([\w.\-]+)(?:\s*\|[^}}]*)?\s*\}}\}}", text):
         var_name = match.group(1)
         tokens.append({"type": "variable", "var_name": var_name, "pos": match.start()})
 
