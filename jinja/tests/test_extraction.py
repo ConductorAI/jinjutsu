@@ -1,7 +1,4 @@
-from conduit.server.features.doj.templates.extractor import (
-    extract_template_variables,
-    validate_template_jinja,
-)
+from conduit.server.features.doj.templates.extraction import extract_template_variables
 
 
 def test_extracts_docxtpl_tr_loop_variable():
@@ -31,36 +28,12 @@ def test_plain_for_loop_still_extracted():
     assert "rows" in variables
 
 
-def test_docxtpl_prefixed_tags_do_not_trip_mismatch_check():
-    text = "{%tr for row in funding_rows %}{%tr if row.active %}{{ row.source }}{%tr endif %}{%tr endfor %}"
-
-    warnings = validate_template_jinja(text)
-
-    assert not any("Mismatched" in w for w in warnings)
-
-
-def test_docxtpl_paragraph_conditional_is_not_a_syntax_error():
-    text = "{%p if strategic_requirement_1 or strategic_requirement_2 %}{{ strategic_requirement_1 }}{%p endif %}"
-
-    warnings = validate_template_jinja(text)
-
-    assert not warnings
-
-
 def test_extracts_docxtpl_prefixed_variable():
     text = "{{r rich_text_field }}"
 
     variables = extract_template_variables(text)
 
     assert "rich_text_field" in variables
-
-
-def test_docxtpl_prefixed_variable_is_not_a_syntax_error():
-    text = "{{r rich_text_field }}"
-
-    warnings = validate_template_jinja(text)
-
-    assert not warnings
 
 
 def test_plain_variable_still_extracted():
@@ -134,9 +107,63 @@ def test_commented_out_variables_are_ignored():
     assert set(variables) == {"real_var"}
 
 
-def test_malformed_template_falls_back_to_best_effort_extraction():
+def test_malformed_template_returns_empty_schema():
     text = "{% for row in funding_rows %}{{ row.source }}"
 
     variables = extract_template_variables(text)
 
-    assert "funding_rows" in variables
+    assert variables == {}
+
+
+def test_nested_loops_build_nested_list_of_objects():
+    text = "{% for s in sections %}{{ s.title }}{% for a in s.authorized %}{{ a.name }}{% endfor %}{% endfor %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["sections"] == {
+        "type": "list",
+        "item_format": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "authorized": {
+                "type": "list",
+                "item_format": "object",
+                "properties": {"name": {"type": "string"}},
+            },
+        },
+    }
+
+
+def test_bare_loop_item_is_list_of_strings():
+    text = "{% for c in countries %}{{ c }}{% endfor %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["countries"] == {"type": "list", "item_format": "string"}
+
+
+def test_non_name_iterable_extracts_argument_not_loop_local():
+    text = "{% for i in range(count) %}{{ i }}{% endfor %}"
+
+    variables = extract_template_variables(text)
+
+    assert set(variables) == {"count"}
+    assert variables["count"] == {"type": "string"}
+
+
+def test_boolean_operators_in_condition_extract_boolean_operands():
+    assert extract_template_variables("{% if a and b %}x{% endif %}") == {
+        "a": {"type": "boolean"},
+        "b": {"type": "boolean"},
+    }
+    assert extract_template_variables("{% if not hidden %}x{% endif %}") == {
+        "hidden": {"type": "boolean"},
+    }
+
+
+def test_set_block_target_is_shadowed():
+    text = "{% set greeting %}Hello {{ name }}{% endset %}{{ greeting }}"
+
+    variables = extract_template_variables(text)
+
+    assert set(variables) == {"name"}
