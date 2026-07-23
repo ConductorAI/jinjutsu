@@ -69,3 +69,74 @@ def test_plain_variable_still_extracted():
     variables = extract_template_variables(text)
 
     assert "plain_var" in variables
+
+
+def test_extracts_condition_only_variable_as_boolean():
+    text = "{%tc if fy_col_1_visible %}{{ fy_col_1_label }}{%tc endif %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["fy_col_1_visible"] == {"type": "boolean"}
+    assert variables["fy_col_1_label"] == {"type": "string"}
+
+
+def test_variable_used_in_condition_and_output_is_string():
+    text = "{% if status %}{{ status }}{% endif %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["status"] == {"type": "string"}
+
+
+def test_comparison_against_literal_is_string_not_boolean():
+    text = "{% if phase == 'FINAL' %}done{% endif %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["phase"] == {"type": "string"}
+
+
+def test_top_level_object_access_builds_nested_object():
+    text = "{{ section.header.title }}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["section"] == {
+        "type": "object",
+        "properties": {
+            "header": {"type": "object", "properties": {"title": {"type": "string"}}},
+        },
+    }
+
+
+def test_extracts_ternary_and_filter_argument_variables():
+    text = "{{ value if show_it else fallback }}{{ price | default(fallback_price) }}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["show_it"] == {"type": "boolean"}
+    assert set(variables) == {"value", "show_it", "fallback", "price", "fallback_price"}
+
+
+def test_loop_locals_and_set_targets_are_not_extracted():
+    text = "{% for k, v in mapping %}{{ k }}{{ v }}{% endfor %}{% set total = a + b %}{{ total }}"
+
+    variables = extract_template_variables(text)
+
+    assert set(variables) == {"mapping", "a", "b"}
+
+
+def test_commented_out_variables_are_ignored():
+    text = "{# {{ commented_out }} #}{{ real_var }}"
+
+    variables = extract_template_variables(text)
+
+    assert set(variables) == {"real_var"}
+
+
+def test_malformed_template_falls_back_to_best_effort_extraction():
+    text = "{% for row in funding_rows %}{{ row.source }}"
+
+    variables = extract_template_variables(text)
+
+    assert "funding_rows" in variables
