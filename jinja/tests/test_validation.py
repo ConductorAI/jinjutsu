@@ -23,3 +23,19 @@ def test_docxtpl_prefixed_variable_is_not_a_syntax_error():
     warnings = validate_template_jinja(text)
 
     assert not warnings
+
+
+def test_whitespace_control_tags_do_not_trip_mismatch_check():
+    text = "{%- if flag %}{{ value }}{%- endif %}{%- for row in rows -%}{{ row.name }}{%- endfor -%}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_whitespace_control_tags_are_counted_in_mismatch_check():
+    text = "{%- if flag %}{{ value }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("1 {% if %} tag(s) but 0 {% endif %} tag(s)" in w for w in warnings)

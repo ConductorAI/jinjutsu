@@ -110,8 +110,8 @@ def _check_mismatched_tags(full_text: str) -> list[str]:
     """Check for mismatched loop and conditional tags."""
     warnings = []
 
-    for_count = len(re.findall(rf"\{{%{DOCXTPL_TAG_PREFIX}?\s*for\s+", full_text))
-    endfor_count = len(re.findall(rf"\{{%{DOCXTPL_TAG_PREFIX}?\s*endfor\s*%\}}", full_text))
+    for_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*for\s+", full_text))
+    endfor_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endfor\s*-?%\}}", full_text))
     if for_count != endfor_count:
         warnings.append(
             f"Mismatched loop tags\n"
@@ -119,8 +119,8 @@ def _check_mismatched_tags(full_text: str) -> list[str]:
             f"  Fix: Each {{% for %}} must have a corresponding {{% endfor %}}"
         )
 
-    if_count = len(re.findall(rf"\{{%{DOCXTPL_TAG_PREFIX}?\s*if\s+", full_text))
-    endif_count = len(re.findall(rf"\{{%{DOCXTPL_TAG_PREFIX}?\s*endif\s*%\}}", full_text))
+    if_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*if\s+", full_text))
+    endif_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endif\s*-?%\}}", full_text))
     if if_count != endif_count:
         warnings.append(
             f"Mismatched conditional tags\n"
