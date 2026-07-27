@@ -71,9 +71,8 @@ def find_schema_conflicts(text: str) -> list[str]:
     """
     Report places where a template uses one path in two incompatible ways.
 
-    The schema can describe each path only one way, so these templates silently render empty
-    fields or Python reprs rather than failing. Nothing else in the pipeline reports them:
-    Jinja renders them without error and the generated example data looks reasonable.
+    Nothing else catches these: the schema can only describe a path one way, and Jinja renders the
+    result without error, so the document silently gets an empty field or a Python repr.
     """
     try:
         ast = parse_template(text)
@@ -136,15 +135,9 @@ class _SchemaVisitor(NodeVisitor):
     supplies the fields on those names so the full data shape can be generated. Loop targets and
     set assignments are tracked as local scope so their names never leak into the schema.
 
-    The walk also collects what find_schema_conflicts needs, since only this pass sees how each
-    path is used:
-      - conflicts: paths read as a field of something already established as a list or a value
-      - conflict_paths: the same paths, so one root cause yields one warning
-      - printed: paths printed on their own, which find_schema_conflicts checks against the
-        finished schema to catch a whole container reaching the document
-
-    lineno tracks the node currently being visited so those warnings can cite a line. Every
-    visit_* method must set it, or a conflict will be reported against a stale line.
+    The walk also collects `conflicts` and `printed` for find_schema_conflicts, since only this
+    pass sees how each path is used. Every visit_* method must set `lineno`, or those warnings
+    will cite a stale line.
     """
 
     def __init__(self) -> None:
@@ -207,9 +200,9 @@ class _SchemaVisitor(NodeVisitor):
 
     def _record_printed(self, node: nodes.Node) -> None:
         """
-        Note a path printed directly, so find_schema_conflicts can tell whether a whole container
-        reaches the document. Only a bare path counts: {{ items | length }} is a Filter, not a
-        print of items itself, so filtered and indexed uses are correctly ignored.
+        Note a path printed on its own, so find_schema_conflicts can catch a whole container
+        reaching the document. Only a bare path counts, so a legitimate {{ items | length }} is
+        ignored: that is a Filter, not a print of items itself.
         """
         name = name_path(node)
         if not name:
@@ -253,9 +246,8 @@ class _SchemaVisitor(NodeVisitor):
         """
         Record a name compared against the literal true or false as a boolean.
 
-        Only the boolean literals qualify: no string can satisfy `x == true`, so the variable must
-        be supplied as a real boolean. A quoted comparison like `x == 'true'` is a string Const and
-        falls through to the string path.
+        Only the boolean literals qualify, since no string can satisfy `x == true`. A quoted
+        `x == 'true'` is a string Const and falls through to the string path.
         """
         if not isinstance(node, nodes.Compare) or len(node.ops) != 1:
             return False
@@ -295,16 +287,16 @@ class _SchemaVisitor(NodeVisitor):
         Resolve a name path to the container holding its leaf and that leaf's key, creating
         intermediate objects and lists along the way.
 
-        Returns None when the path has no leaf to record, either because it ends in a subscript
-        (items[0], which only tells us items is a list) or because it nests one subscript directly
-        inside another (matrix[0][1], a shape this schema cannot express).
+        Returns None when there is no leaf to record: the path ends in a subscript (items[0], which
+        only tells us items is a list), or nests one subscript in another (matrix[0][1], a shape
+        this schema cannot express).
         """
         frame = self._lookup_frame(root)
         if not attrs:
             return frame or self.root, root
 
-        # A name bound by a loop or set resolves into its scope frame, so writes against it never
-        # reach the schema. Its remaining segments continue from the bound node's own item shape.
+        # A loop or set target resolves into its scope frame, so writes against it never reach the
+        # schema. Its remaining segments continue from the bound node's own item shape.
         container = frame[root].setdefault("properties", {}) if frame else self.root
         key: str | None = None if frame else root
         path = [root]

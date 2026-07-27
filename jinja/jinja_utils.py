@@ -38,8 +38,8 @@ def name_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
     Resolve a Name / Getattr / constant Getitem chain to (root_name, path_segments), else None.
 
     A string subscript is a property name, so r['items'] resolves the same as r.items. An integer
-    subscript is a list index and yields PathSegment.LIST_INDEX. Non-constant subscripts like
-    items[i] cannot be resolved and return None.
+    subscript is a list index, yielding PathSegment.LIST_INDEX. Non-constant subscripts like
+    items[i] return None.
     """
     segments: list[NamePathSegment] = []
     current = node

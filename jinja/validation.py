@@ -102,8 +102,8 @@ def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
     """
     Check for statement tags whose opening '%' is missing or out of position, e.g. '{if% x %}'.
 
-    Jinja cannot report these: without a leading '{%' the whole tag lexes as literal text, so the
-    only error it raises is an unmatched end tag somewhere further down the template.
+    Jinja cannot report these: without a leading '{%' the tag lexes as literal text, so the only
+    error it raises is an unmatched end tag further down the template.
     """
     warnings = []
     for line_num, line in enumerate(lines, start=1):
@@ -175,9 +175,9 @@ def _check_dict_method_attributes(lines: list[str]) -> list[str]:
     """
     Check for fields read with dot syntax whose name is also a built-in dict method.
 
-    Jinja resolves x.items to the dictionary's own method before looking for an "items" key, so the
-    document renders the method object instead of the value. Bracket syntax has no such ambiguity.
-    An explicit call like x.items() is deliberate and is left alone.
+    Jinja resolves x.items to the dict's own method before looking for an "items" key, so the
+    document renders the method object. Bracket syntax has no such ambiguity. An explicit call
+    like x.items() is deliberate and is left alone.
     """
     warnings = []
     for line_num, line in enumerate(lines, start=1):
