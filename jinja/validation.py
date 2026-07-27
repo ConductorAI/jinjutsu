@@ -4,6 +4,9 @@ from jinja2 import TemplateSyntaxError
 
 from .jinja_utils import DOCXTPL_TAG_PREFIX, parse_template
 
+# Statement keywords that identify a brace-delimited chunk as an attempted Jinja tag
+_JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
+
 
 def validate_template_jinja(full_text: str) -> list[str]:
     """
@@ -82,8 +85,35 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
                     f"  {line}"
                 )
 
+    warnings.extend(_check_misplaced_statement_delimiters(lines))
     warnings.extend(_check_hyphenated_variables(lines))
 
+    return warnings
+
+
+def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
+    """
+    Check for statement tags whose opening '%' is missing or out of position, e.g. '{if% x %}'.
+
+    Jinja cannot report these: without a leading '{%' the whole tag lexes as literal text, so the
+    only error it raises is an unmatched end tag somewhere further down the template.
+    """
+    warnings = []
+    for line_num, line in enumerate(lines, start=1):
+        for match in re.finditer(r"\{(?![%{#])([^{}]*?)%\}", line):
+            content = match.group(1)
+            if not re.search(rf"\b{_JINJA_STATEMENT_KEYWORD}\b", content):
+                continue
+            malformed_tag = match.group(0)
+            fixed_tag = f"{{% {content.replace('%', '').strip()} %}}"
+            warnings.append(
+                f"Line {line_num}: Misplaced '%' in statement tag\n"
+                f"  Found: {malformed_tag}\n"
+                f"  Fix:   {fixed_tag}\n"
+                f"  Reason: A statement tag must open with '{{%'. Jinja reads this as plain text, "
+                f"so its matching end tag will be reported as an error elsewhere.\n"
+                f"  {line}"
+            )
     return warnings
 
 

@@ -33,6 +33,39 @@ def test_whitespace_control_tags_do_not_trip_mismatch_check():
     assert not warnings
 
 
+def test_transposed_statement_delimiter_is_reported_with_line_number():
+    text = "intro\n{if% sales_rep == true %}\nbody\n{%- endif %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Line 2: Misplaced '%' in statement tag" in w for w in warnings)
+    assert any("Fix:   {% if sales_rep == true %}" in w for w in warnings)
+
+
+def test_statement_tag_missing_opening_percent_is_reported():
+    text = "{ if sales_rep %}body{% endif %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Misplaced '%' in statement tag" in w for w in warnings)
+
+
+def test_braced_literal_without_jinja_keyword_is_not_reported():
+    text = "The fee is {50%} of the total"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_valid_tags_are_not_flagged_as_misplaced_delimiters():
+    text = "{% if a %}{{ b }}{%- endif %}{%tr for r in rows %}{{r r.name }}{%tr endfor %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
 def test_whitespace_control_tags_are_counted_in_mismatch_check():
     text = "{%- if flag %}{{ value }}"
 
