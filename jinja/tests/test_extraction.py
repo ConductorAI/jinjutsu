@@ -6,9 +6,11 @@ def test_extracts_docxtpl_tr_loop_variable():
 
     variables = extract_template_variables(text)
 
-    assert "funding_rows" in variables
-    assert variables["funding_rows"]["type"] == "list"
-    assert variables["funding_rows"]["properties"]["source"] == {"type": "string"}
+    assert variables["funding_rows"] == {
+        "type": "list",
+        "item_format": "object",
+        "properties": {"source": {"type": "string"}},
+    }
 
 
 def test_extracts_all_docxtpl_loop_prefixes():
