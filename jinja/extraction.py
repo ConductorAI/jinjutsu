@@ -156,11 +156,34 @@ class _SchemaVisitor(NodeVisitor):
         if isinstance(node, nodes.Not):
             self._record_test(node.node)
             return
+        if self._record_boolean_comparison(node):
+            return
         name = name_path(node)
         if name:
             self._record_path(*name, leaf_bool=True)
             return
         self._record_load(node)
+
+    def _record_boolean_comparison(self, node: nodes.Node) -> bool:
+        """
+        Record a name compared against the literal true or false as a boolean.
+
+        Only the boolean literals qualify: no string can satisfy `x == true`, so the variable must
+        be supplied as a real boolean. A quoted comparison like `x == 'true'` is a string Const and
+        falls through to the string path.
+        """
+        if not isinstance(node, nodes.Compare) or len(node.ops) != 1:
+            return False
+        operand = node.ops[0]
+        if operand.op not in ("eq", "ne") or not isinstance(operand.expr, nodes.Const):
+            return False
+        if not isinstance(operand.expr.value, bool):
+            return False
+        name = name_path(node.expr)
+        if not name:
+            return False
+        self._record_path(*name, leaf_bool=True)
+        return True
 
     def _record_path(self, root: str, attrs: list[str], leaf_bool: bool) -> None:
         container, key = self._resolve(root, attrs)

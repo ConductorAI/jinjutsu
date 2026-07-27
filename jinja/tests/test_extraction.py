@@ -71,6 +71,53 @@ def test_comparison_against_literal_is_string_not_boolean():
     assert variables["phase"] == {"type": "string"}
 
 
+def test_comparison_against_boolean_literal_is_boolean():
+    assert extract_template_variables("{% if sales_rep == true %}x{% endif %}") == {
+        "sales_rep": {"type": "boolean"},
+    }
+    assert extract_template_variables("{% if sales_rep == false %}x{% endif %}") == {
+        "sales_rep": {"type": "boolean"},
+    }
+    assert extract_template_variables("{% if sales_rep != true %}x{% endif %}") == {
+        "sales_rep": {"type": "boolean"},
+    }
+
+
+def test_quoted_comparison_against_true_is_string():
+    text = "{% if phase == 'true' %}x{% endif %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["phase"] == {"type": "string"}
+
+
+def test_comparison_against_number_is_string():
+    text = "{% if count == 1 %}x{% endif %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["count"] == {"type": "string"}
+
+
+def test_boolean_comparison_on_nested_attribute_is_boolean():
+    text = "{% for r in rows %}{% if r.active == true %}{{ r.name }}{% endif %}{% endfor %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["rows"]["properties"] == {
+        "active": {"type": "boolean"},
+        "name": {"type": "string"},
+    }
+
+
+def test_boolean_comparison_demoted_to_string_when_also_output():
+    text = "{% if sales_rep == true %}{{ sales_rep }}{% endif %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["sales_rep"] == {"type": "string"}
+
+
 def test_top_level_object_access_builds_nested_object():
     text = "{{ section.header.title }}"
 
