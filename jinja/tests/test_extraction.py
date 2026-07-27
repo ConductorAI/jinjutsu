@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.extraction import extract_template_variables
+from conduit.server.features.doj.templates.extraction import extract_template_variables, find_schema_conflicts
 
 
 def test_extracts_docxtpl_tr_loop_variable():
@@ -299,3 +299,71 @@ def test_set_block_target_is_shadowed():
     variables = extract_template_variables(text)
 
     assert set(variables) == {"name"}
+
+
+def test_path_used_as_both_list_and_object_is_reported():
+    text = "{% for x in a.b %}{{ x.c }}{% endfor %}{{ a.b.d }}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert len(conflicts) == 1
+    assert "'a.b' is used as both a list and an object" in conflicts[0]
+
+
+def test_path_used_as_both_value_and_object_is_reported():
+    text = "{{ a }}{{ a.b }}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert len(conflicts) == 1
+    assert "'a' is used as both a value and an object" in conflicts[0]
+
+
+def test_whole_object_printed_is_reported():
+    text = "{{ a.b }}{{ a }}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert len(conflicts) == 1
+    assert "'a' is printed as a whole object" in conflicts[0]
+
+
+def test_whole_list_printed_is_reported():
+    text = "{% for x in items %}{{ x.c }}{% endfor %}{{ items }}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert len(conflicts) == 1
+    assert "'items' is printed as a whole list" in conflicts[0]
+
+
+def test_conflict_cites_the_line_of_the_offending_expression():
+    text = "intro\n{{ alpha }}\nmiddle\n{{ alpha.beta }}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert any("Line 4:" in c for c in conflicts)
+
+
+def test_filtered_list_is_not_a_conflict():
+    text = '{% for x in items %}{{ x.c }}{% endfor %}Total: {{ items | length }}{{ items | join(", ") }}'
+
+    assert find_schema_conflicts(text) == []
+
+
+def test_consistent_nested_access_is_not_a_conflict():
+    text = "{{ a.b.c }}{{ a.b.d }}{{ section.header.title }}{{ line_items[0].label }}"
+
+    assert find_schema_conflicts(text) == []
+
+
+def test_loop_locals_are_not_conflicts():
+    text = "{% for r in rows %}{{ r.name }}{{ r }}{% endfor %}"
+
+    assert find_schema_conflicts(text) == []
+
+
+def test_unparseable_template_has_no_conflicts():
+    text = "{{ a }}{{ a.b }}{% for x in rows %}"
+
+    assert find_schema_conflicts(text) == []
