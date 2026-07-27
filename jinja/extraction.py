@@ -163,35 +163,11 @@ class _SchemaVisitor(NodeVisitor):
         self._record_load(node)
 
     def _record_path(self, root: str, attrs: list[str], leaf_bool: bool) -> None:
-        local = self._lookup_local(root)
-        if local:
-            if not attrs:
-                return
-            self._descend_and_set(local.setdefault("properties", {}), attrs, leaf_bool)
-        elif not attrs:
-            self._set_leaf(self.root, root, leaf_bool)
-        else:
-            self._descend_and_set(self._ensure_object(self.root, root), attrs, leaf_bool)
+        container, key = self._resolve(root, attrs)
+        self._set_leaf(container, key, leaf_bool)
 
     def _ensure_list(self, root: str, attrs: list[str]) -> SchemaField:
-        local = self._lookup_local(root)
-        if local:
-            if not attrs:
-                return local
-            return self._make_list(local.setdefault("properties", {}), attrs)
-        if not attrs:
-            return self._make_list(self.root, [root])
-        return self._make_list(self._ensure_object(self.root, root), attrs)
-
-    def _descend_and_set(self, container: dict[str, SchemaField], attrs: list[str], leaf_bool: bool) -> None:
-        for segment in attrs[:-1]:
-            container = self._ensure_object(container, segment)
-        self._set_leaf(container, attrs[-1], leaf_bool)
-
-    def _make_list(self, container: dict[str, SchemaField], attrs: list[str]) -> SchemaField:
-        for segment in attrs[:-1]:
-            container = self._ensure_object(container, segment)
-        key = attrs[-1]
+        container, key = self._resolve(root, attrs)
         existing = container.get(key)
         if existing and existing.get("type") == "list":
             return existing
@@ -199,6 +175,20 @@ class _SchemaVisitor(NodeVisitor):
         node: SchemaField = {"type": "list"}
         container[key] = node
         return node
+
+    def _resolve(self, root: str, attrs: list[str]) -> tuple[dict[str, SchemaField], str]:
+        """
+        Resolve a dotted name to the container holding its leaf and that leaf's key, creating
+        intermediate objects along the way. Names bound by a loop or set resolve into their scope
+        frame, so writes against them never reach the schema.
+        """
+        frame = self._lookup_frame(root)
+        if not attrs:
+            return frame or self.root, root
+        container = frame[root].setdefault("properties", {}) if frame else self._ensure_object(self.root, root)
+        for segment in attrs[:-1]:
+            container = self._ensure_object(container, segment)
+        return container, attrs[-1]
 
     def _ensure_object(self, container: dict[str, SchemaField], key: str) -> dict[str, SchemaField]:
         existing = container.get(key)
@@ -208,15 +198,15 @@ class _SchemaVisitor(NodeVisitor):
         container[key] = {"type": "object", "properties": properties}
         return properties
 
-    def _set_leaf(self, container: dict[str, SchemaField], key: str, wants_bool: bool) -> None:
+    def _set_leaf(self, container: dict[str, SchemaField], key: str, leaf_bool: bool) -> None:
         existing = container.get(key)
         if not existing:
-            container[key] = {"type": "boolean"} if wants_bool else {"type": "string"}
-        elif existing.get("type") == "boolean" and not wants_bool:
+            container[key] = {"type": "boolean"} if leaf_bool else {"type": "string"}
+        elif existing.get("type") == "boolean" and not leaf_bool:
             existing["type"] = "string"
 
-    def _lookup_local(self, name: str) -> SchemaField | None:
+    def _lookup_frame(self, name: str) -> dict[str, SchemaField] | None:
         for frame in reversed(self.scope):
             if name in frame:
-                return frame[name]
+                return frame
         return None
