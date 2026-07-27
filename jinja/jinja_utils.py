@@ -1,4 +1,5 @@
 import re
+from enum import Enum, auto
 
 from jinja2 import Environment, nodes
 
@@ -6,6 +7,16 @@ JINJA_ENV = Environment()
 
 # docxtpl adds row/cell/paragraph/run prefixes to Jinja tags, e.g. {%tr for ... %} or {{r ... }}
 DOCXTPL_TAG_PREFIX = r"(?:tr|tc|p|r)"
+
+
+class PathSegment(Enum):
+    """Segment of a name path that is not a property name."""
+
+    LIST_INDEX = auto()
+
+
+# A property name, or a marker for a list subscript such as the [0] in items[0].name
+NamePathSegment = str | PathSegment
 
 
 def normalize_docxtpl_prefixes(text: str) -> str:
@@ -22,15 +33,33 @@ def parse_template(text: str) -> nodes.Template:
     return JINJA_ENV.parse(normalize_docxtpl_prefixes(text))
 
 
-def name_path(node: nodes.Node) -> tuple[str, list[str]] | None:
-    """Resolve a Name / Getattr chain to (root_name, attribute_path), else None."""
-    attrs: list[str] = []
+def name_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
+    """
+    Resolve a Name / Getattr / constant Getitem chain to (root_name, path_segments), else None.
+
+    A string subscript is a property name, so r['items'] resolves the same as r.items. An integer
+    subscript is a list index and yields PathSegment.LIST_INDEX. Non-constant subscripts like
+    items[i] cannot be resolved and return None.
+    """
+    segments: list[NamePathSegment] = []
     current = node
-    while isinstance(current, nodes.Getattr):
-        attrs.append(current.attr)
-        current = current.node
+    while True:
+        if isinstance(current, nodes.Getattr):
+            segments.append(current.attr)
+            current = current.node
+        elif isinstance(current, nodes.Getitem) and isinstance(current.arg, nodes.Const):
+            value = current.arg.value
+            if isinstance(value, str):
+                segments.append(value)
+            elif isinstance(value, int):
+                segments.append(PathSegment.LIST_INDEX)
+            else:
+                return None
+            current = current.node
+        else:
+            break
     if isinstance(current, nodes.Name):
-        return current.name, list(reversed(attrs))
+        return current.name, list(reversed(segments))
     return None
 
 

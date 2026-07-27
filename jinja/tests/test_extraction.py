@@ -71,6 +71,88 @@ def test_comparison_against_literal_is_string_not_boolean():
     assert variables["phase"] == {"type": "string"}
 
 
+def test_indexed_access_builds_list_of_objects():
+    text = "{{ items[0].name }}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["items"] == {
+        "type": "list",
+        "item_format": "object",
+        "properties": {"name": {"type": "string"}},
+    }
+
+
+def test_dot_number_access_builds_list_of_objects():
+    text = "{{ items.0.name }}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["items"] == {
+        "type": "list",
+        "item_format": "object",
+        "properties": {"name": {"type": "string"}},
+    }
+
+
+def test_bare_indexed_access_is_list_of_strings():
+    text = "{{ items[0] }}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["items"] == {"type": "list", "item_format": "string", "properties": {}}
+
+
+def test_indexed_access_nested_under_object():
+    text = "{{ a.b[0].c }}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["a"] == {
+        "type": "object",
+        "properties": {
+            "b": {"type": "list", "item_format": "object", "properties": {"c": {"type": "string"}}},
+        },
+    }
+
+
+def test_string_subscript_is_a_property_not_an_index():
+    text = "{{ r['items'] }}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["r"] == {"type": "object", "properties": {"items": {"type": "string"}}}
+
+
+def test_string_subscript_is_never_mistaken_for_an_index_marker():
+    text = "{{ r['[]'] }}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["r"] == {"type": "object", "properties": {"[]": {"type": "string"}}}
+
+
+def test_indexed_access_merges_with_loop_over_same_list():
+    text = "{{ items[0].name }}{% for i in items %}{{ i.other }}{% endfor %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["items"] == {
+        "type": "list",
+        "item_format": "object",
+        "properties": {"name": {"type": "string"}, "other": {"type": "string"}},
+    }
+
+
+def test_dynamic_subscript_is_not_resolved():
+    text = "{{ items[i] }}"
+
+    variables = extract_template_variables(text)
+
+    assert set(variables) == {"items", "i"}
+    assert variables["items"] == {"type": "string"}
+
+
 def test_comparison_against_boolean_literal_is_boolean():
     assert extract_template_variables("{% if sales_rep == true %}x{% endif %}") == {
         "sales_rep": {"type": "boolean"},
@@ -104,9 +186,10 @@ def test_boolean_comparison_on_nested_attribute_is_boolean():
 
     variables = extract_template_variables(text)
 
-    assert variables["rows"]["properties"] == {
-        "active": {"type": "boolean"},
-        "name": {"type": "string"},
+    assert variables["rows"] == {
+        "type": "list",
+        "item_format": "object",
+        "properties": {"active": {"type": "boolean"}, "name": {"type": "string"}},
     }
 
 

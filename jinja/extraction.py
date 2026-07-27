@@ -5,7 +5,7 @@ from typing import Literal, TypedDict
 from jinja2 import TemplateSyntaxError, meta, nodes
 from jinja2.visitor import NodeVisitor
 
-from .jinja_utils import name_path, parse_template, target_names
+from .jinja_utils import NamePathSegment, PathSegment, name_path, parse_template, target_names
 
 SchemaType = Literal["string", "boolean", "list", "object"]
 ItemFormat = Literal["string", "object"]
@@ -185,40 +185,63 @@ class _SchemaVisitor(NodeVisitor):
         self._record_path(*name, leaf_bool=True)
         return True
 
-    def _record_path(self, root: str, attrs: list[str], leaf_bool: bool) -> None:
-        container, key = self._resolve(root, attrs)
+    def _record_path(self, root: str, attrs: list[NamePathSegment], leaf_bool: bool) -> None:
+        resolved = self._resolve(root, attrs)
+        if not resolved:
+            return
+        container, key = resolved
         self._set_leaf(container, key, leaf_bool)
 
-    def _ensure_list(self, root: str, attrs: list[str]) -> SchemaField:
-        container, key = self._resolve(root, attrs)
+    def _ensure_list(self, root: str, attrs: list[NamePathSegment]) -> SchemaField:
+        # item_format is assigned later by _refine_list_formats once the item's shape is known.
+        resolved = self._resolve(root, attrs)
+        if not resolved:
+            return {"type": "list"}
+        container, key = resolved
         existing = container.get(key)
         if existing and existing.get("type") == "list":
             return existing
-        # item_format is assigned later by _refine_list_formats once the item's shape is known.
         node: SchemaField = {"type": "list"}
         container[key] = node
         return node
 
-    def _resolve(self, root: str, attrs: list[str]) -> tuple[dict[str, SchemaField], str]:
+    def _resolve(self, root: str, attrs: list[NamePathSegment]) -> tuple[dict[str, SchemaField], str] | None:
         """
-        Resolve a dotted name to the container holding its leaf and that leaf's key, creating
-        intermediate objects along the way. Names bound by a loop or set resolve into their scope
-        frame, so writes against them never reach the schema.
+        Resolve a name path to the container holding its leaf and that leaf's key, creating
+        intermediate objects and lists along the way.
+
+        Returns None when the path has no leaf to record, either because it ends in a subscript
+        (items[0], which only tells us items is a list) or because it nests one subscript directly
+        inside another (matrix[0][1], a shape this schema cannot express).
         """
         frame = self._lookup_frame(root)
         if not attrs:
             return frame or self.root, root
-        container = frame[root].setdefault("properties", {}) if frame else self._ensure_object(self.root, root)
-        for segment in attrs[:-1]:
-            container = self._ensure_object(container, segment)
-        return container, attrs[-1]
 
-    def _ensure_object(self, container: dict[str, SchemaField], key: str) -> dict[str, SchemaField]:
+        # A name bound by a loop or set resolves into its scope frame, so writes against it never
+        # reach the schema. Its remaining segments continue from the bound node's own item shape.
+        container = frame[root].setdefault("properties", {}) if frame else self.root
+        key: str | None = None if frame else root
+
+        for segment in attrs:
+            if segment is PathSegment.LIST_INDEX:
+                if not key:
+                    return None
+                container = self._ensure_container(container, key, as_list=True)
+                key = None
+            elif not key:
+                key = segment
+            else:
+                container = self._ensure_container(container, key, as_list=False)
+                key = segment
+        return (container, key) if key else None
+
+    def _ensure_container(self, container: dict[str, SchemaField], key: str, as_list: bool) -> dict[str, SchemaField]:
         existing = container.get(key)
         if existing and existing.get("type") in ("object", "list"):
             return existing.setdefault("properties", {})
         properties: dict[str, SchemaField] = {}
-        container[key] = {"type": "object", "properties": properties}
+        container[key] = {"type": "list" if as_list else "object", "properties": properties}
         return properties
 
     def _set_leaf(self, container: dict[str, SchemaField], key: str, leaf_bool: bool) -> None:
