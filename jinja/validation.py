@@ -7,6 +7,9 @@ from .jinja_utils import DOCXTPL_TAG_PREFIX, parse_template
 # Statement keywords that identify a brace-delimited chunk as an attempted Jinja tag
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
 
+# Dict methods that win over a same-named key during Jinja attribute lookup, e.g. {{ r.items }}
+_DICT_METHOD = r"(?:clear|copy|fromkeys|get|items|keys|pop|popitem|setdefault|update|values)"
+
 
 def validate_template_jinja(full_text: str) -> list[str]:
     """
@@ -27,6 +30,10 @@ def validate_template_jinja(full_text: str) -> list[str]:
         # If we use both checkers there will be duplicate errors
         # The jinja checker error messages are not as easy to read as the ones we emit from our custom checks
         warnings.extend(_check_jinja_syntax(full_text))
+
+    # Runs outside the gate above: a valid template can still contain this, and it must not
+    # suppress the syntax errors that gate reports.
+    warnings.extend(_check_dict_method_attributes(lines))
     return warnings
 
 
@@ -104,6 +111,9 @@ def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
             content = match.group(1)
             if not re.search(rf"\b{_JINJA_STATEMENT_KEYWORD}\b", content):
                 continue
+            if re.match(r"\s*%", content):
+                # '{ % if x %}' is the extra-space case, already reported by _check_malformed_tags
+                continue
             malformed_tag = match.group(0)
             fixed_tag = f"{{% {content.replace('%', '').strip()} %}}"
             warnings.append(
@@ -158,6 +168,31 @@ def _check_mismatched_tags(full_text: str) -> list[str]:
             f"  Fix: Each {{% if %}} must have a corresponding {{% endif %}}"
         )
 
+    return warnings
+
+
+def _check_dict_method_attributes(lines: list[str]) -> list[str]:
+    """
+    Check for fields read with dot syntax whose name is also a built-in dict method.
+
+    Jinja resolves x.items to the dictionary's own method before looking for an "items" key, so the
+    document renders the method object instead of the value. Bracket syntax has no such ambiguity.
+    An explicit call like x.items() is deliberate and is left alone.
+    """
+    warnings = []
+    for line_num, line in enumerate(lines, start=1):
+        for tag in re.finditer(r"\{[%{].*?[%}]\}", line):
+            tag_text = tag.group()
+            for match in re.finditer(rf"\.({_DICT_METHOD})\b(?!\s*\()", tag_text):
+                field = match.group(1)
+                warnings.append(
+                    f"Line {line_num}: Field '{field}' collides with a built-in dict method\n"
+                    f"  Found: {tag_text}\n"
+                    f"  Fix:   {tag_text.replace('.' + field, f'[{field!r}]')}\n"
+                    f"  Reason: Jinja reads '.{field}' as the dictionary's own method, so the "
+                    f"document renders the method instead of your value. Use bracket syntax.\n"
+                    f"  {line}"
+                )
     return warnings
 
 

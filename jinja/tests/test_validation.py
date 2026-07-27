@@ -42,6 +42,15 @@ def test_transposed_statement_delimiter_is_reported_with_line_number():
     assert any("Fix:   {% if sales_rep == true %}" in w for w in warnings)
 
 
+def test_extra_space_after_brace_is_reported_only_once():
+    text = "{ % if alpha %}body{% endif %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Extra space after '{' in tag" in w for w in warnings)
+    assert not any("Misplaced '%' in statement tag" in w for w in warnings)
+
+
 def test_statement_tag_missing_opening_percent_is_reported():
     text = "{ if sales_rep %}body{% endif %}"
 
@@ -64,6 +73,56 @@ def test_valid_tags_are_not_flagged_as_misplaced_delimiters():
     warnings = validate_template_jinja(text)
 
     assert not warnings
+
+
+def test_dict_method_field_is_reported_with_bracket_fix():
+    text = "Recipients:\n{% for r in rows %}{{ r.items }}{% endfor %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Line 2: Field 'items' collides with a built-in dict method" in w for w in warnings)
+    assert any("Fix:   {{ r['items'] }}" in w for w in warnings)
+
+
+def test_explicit_dict_method_call_is_not_reported():
+    text = "{% for k, v in mapping.items() %}{{ k }}{{ v }}{% endfor %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_dict_method_name_outside_a_tag_is_not_reported():
+    text = "See r.items in the appendix and obj.values in Exhibit B"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_bracket_access_to_dict_method_name_is_not_reported():
+    text = "{{ r['items'] }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_ordinary_field_names_are_not_reported():
+    text = "{% for r in rows %}{{ r.name }}{{ r.title }}{% endfor %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_dict_method_field_does_not_suppress_syntax_errors():
+    text = "{{ r.items }}\n{if% sales_rep == true %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Misplaced '%' in statement tag" in w for w in warnings)
+    assert any("collides with a built-in dict method" in w for w in warnings)
 
 
 def test_whitespace_control_tags_are_counted_in_mismatch_check():
