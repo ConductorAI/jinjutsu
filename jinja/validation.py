@@ -73,7 +73,7 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
                 )
 
         # Check for { { instead of {{
-        if match := re.search(r"\{\s+\{.*?\}\s*\}", line):
+        if match := re.search(r"(?<!\{)\{\s+\{(?!\{).*?\}\s*\}", line):
             malformed_tag = match.group(0)
             warnings.append(
                 format_warning(

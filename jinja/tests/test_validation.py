@@ -111,6 +111,15 @@ def test_split_opening_brace_is_reported():
     assert any("Fix:   {{ amount }}" in w for w in warnings)
 
 
+def test_doubled_opening_delimiter_is_not_offered_a_third_brace():
+    text = "{{ {{ name }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert warnings
+    assert not any("{{{" in w for w in warnings)
+
+
 def test_split_braces_on_both_ends_are_reported_with_one_fix():
     text = "{ { amount } }"
 
