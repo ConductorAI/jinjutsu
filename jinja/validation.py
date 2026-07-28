@@ -183,6 +183,7 @@ def _check_hyphenated_variables(full_text: str) -> list[str]:
 def _check_mismatched_tags(full_text: str) -> list[str]:
     """Check for mismatched loop and conditional tags."""
     warnings = []
+    full_text = _blank_comments(full_text)
 
     for_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*for\s+", full_text))
     endfor_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endfor\s*-?%\}}", full_text))
@@ -341,7 +342,7 @@ def _iter_tags(full_text: str) -> Iterator[tuple[int, str, str]]:
     swallowing the prose between it and whatever '}}' comes next.
     """
     lines = full_text.split("\n")
-    for match in re.finditer(r"\{[%{](?:(?!\{[%{]).)*?[%}]\}", full_text, re.DOTALL):
+    for match in re.finditer(r"\{[%{](?:(?!\{[%{]).)*?[%}]\}", _blank_comments(full_text), re.DOTALL):
         line_no = full_text.count("\n", 0, match.start()) + 1
         yield line_no, lines[line_no - 1], re.sub(r"\s*\n\s*", " ", match.group())
 
@@ -349,3 +350,13 @@ def _iter_tags(full_text: str) -> Iterator[tuple[int, str, str]]:
 def _blank_string_literals(tag_text: str) -> str:
     "Replace the contents of quoted literals so validation regex doesn't run on them"
     return re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", lambda m: " " * len(m.group()), tag_text)
+
+
+def _blank_comments(full_text: str) -> str:
+    """
+    Replace {# #} spans so commented-out tags are not read as template code.
+
+    Line breaks are kept and every other character becomes a space, which leaves offsets and line
+    numbers unchanged for the checks that report them.
+    """
+    return re.sub(r"\{#.*?#\}", lambda m: re.sub(r"[^\n]", " ", m.group()), full_text, flags=re.DOTALL)

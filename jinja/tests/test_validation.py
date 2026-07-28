@@ -76,6 +76,31 @@ def test_cell_merge_after_a_loop_closes_is_reported():
     assert any("Line 2: Cell merge is not inside a loop" in w for w in warnings)
 
 
+def test_commented_out_tags_are_not_validated():
+    text = "{# old: {{ r.items }} and {{ fiscal-year }} and {% vm %} #}{{ r.name }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_commented_out_conditional_does_not_trip_mismatch_check():
+    text = "{# note: {% if x %} #}{{ y }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_a_real_collision_after_a_comment_is_still_reported():
+    text = "{# old: {{ a.keys }} #}\n{{ r.items }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Line 2: Field 'items' collides with a built-in method" in w for w in warnings)
+    assert not any("Field 'keys'" in w for w in warnings)
+
+
 def test_whitespace_control_tags_do_not_trip_mismatch_check():
     text = "{%- if flag %}{{ value }}{%- endif %}{%- for row in rows -%}{{ row.name }}{%- endfor -%}"
 
