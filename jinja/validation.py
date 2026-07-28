@@ -273,10 +273,5 @@ def _join_quoted(names: Iterable[str]) -> str:
 
 
 def _blank_string_literals(tag_text: str) -> str:
-    """
-    Replace the contents of quoted literals with spaces, keeping the tag's length and offsets.
-
-    Text inside a literal is data, not a field path, so it must not be matched by the attribute
-    checks above.
-    """
-    return re.sub(r"'[^']*'|\"[^\"]*\"", lambda m: " " * len(m.group()), tag_text)
+    "Replace the contents of quoted literals so validation regex doesn't run on them"
+    return re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", lambda m: " " * len(m.group()), tag_text)

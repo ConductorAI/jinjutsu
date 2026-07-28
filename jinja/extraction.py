@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import Enum, auto
 from typing import Literal, TypedDict
 
@@ -210,6 +211,13 @@ class _SchemaVisitor(NodeVisitor):
             self.visit(child)
         self.scope.pop()
 
+    def visit_With(self, node: nodes.With) -> None:  # noqa: N802
+        self.lineno = node.lineno
+        # Read the values before binding, so {% with a = a %} still records the outer name.
+        for value in node.values:
+            self._record_load(value)
+        self._visit_parameterized_block(node.targets, node.body)
+
     def visit_Macro(self, node: nodes.Macro) -> None:  # noqa: N802
         self._visit_parameterized_block(node.args, node.body)
 
@@ -230,9 +238,13 @@ class _SchemaVisitor(NodeVisitor):
         for child in node.body:
             self.visit(child)
 
-    def _visit_parameterized_block(self, args: list[nodes.Name], body: list[nodes.Node]) -> None:
-        """Walk a macro or call block with its parameters bound, so they stay out of the schema."""
-        self.scope.append({arg.name: {"type": "object", "properties": {}} for arg in args})
+    def _visit_parameterized_block(self, targets: Sequence[nodes.Node], body: list[nodes.Node]) -> None:
+        """Walk a macro, call, or with block with its locals bound, so they stay out of the schema."""
+        frame: dict[str, SchemaField] = {}
+        for target in targets:
+            for name in target_names(target):
+                frame[name] = {"type": "object", "properties": {}}
+        self.scope.append(frame)
         for child in body:
             self.visit(child)
         self.scope.pop()

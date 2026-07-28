@@ -189,6 +189,20 @@ def test_three_dict_method_fields_in_a_tag_read_as_a_list():
     assert "Fix:   {{ a['items'] ~ b['values'] ~ c['keys'] }}" in warnings[0]
 
 
+def test_escaped_quote_inside_a_literal_does_not_leak_code_out_of_it():
+    text = r"{{ x if 'John\'s r.keys' else y }}"
+
+    assert not validate_template_jinja(text)
+
+
+def test_escaped_quote_inside_a_literal_does_not_swallow_a_real_collision():
+    text = r"{{ 'John\'s' ~ r.items ~ 'x' }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Field 'items' collides with a built-in dict method" in w for w in warnings)
+
+
 def test_field_name_inside_a_literal_is_not_rewritten_by_the_fix():
     text = "{{ r.items if scope == 'a.items' else f }}"
 

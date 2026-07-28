@@ -330,6 +330,19 @@ def test_set_block_target_is_shadowed():
     assert set(variables) == {"name"}
 
 
+def test_with_block_locals_are_scoped():
+    text = "{% with a = obj %}{{ a }}{{ a.b }}{% endwith %}"
+
+    assert find_schema_conflicts(text) == []
+    assert extract_template_variables(text) == {"obj": {"type": "string"}}
+
+
+def test_with_block_reads_its_value_before_binding_the_name():
+    text = "{% with a = a %}{{ a }}{% endwith %}"
+
+    assert extract_template_variables(text) == {"a": {"type": "string"}}
+
+
 def test_macro_and_call_block_parameters_are_scoped():
     macro = "{% macro row(cfg) %}{{ cfg.a }}{% endmacro %}{% for x in cfg %}{{ x }}{% endfor %}"
     call_block = "{% call(item) render() %}{{ item.a }}{% endcall %}"
