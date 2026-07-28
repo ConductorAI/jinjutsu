@@ -61,6 +61,31 @@ def test_extra_space_after_brace_is_reported_only_once():
     assert not any("Misplaced '%' in statement tag" in w for w in warnings)
 
 
+def test_extra_space_before_closing_brace_is_reported():
+    text = "{% if alpha % }body{% endif %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Line 1: Extra space before '}' in tag" in w for w in warnings)
+    assert any("Fix:   {% if alpha %}" in w for w in warnings)
+
+
+def test_unclosed_loop_is_reported_as_a_loop_mismatch():
+    text = "{% for row in rows %}{{ row.name }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("1 {% for %} tag(s) but 0 {% endfor %} tag(s)" in w for w in warnings)
+
+
+def test_invalid_name_after_a_dot_reports_the_variable_name_guidance():
+    text = "{{ a. }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Invalid variable name in '{{ }}' or '{% %}' tag" in w for w in warnings)
+
+
 def test_statement_tag_missing_opening_percent_is_reported():
     text = "{ if sales_rep %}body{% endif %}"
 
