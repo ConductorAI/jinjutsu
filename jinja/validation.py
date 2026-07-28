@@ -5,10 +5,7 @@ from jinja2 import TemplateSyntaxError
 
 from .jinja_utils import DOCXTPL_TAG_PREFIX, format_warning, parse_template
 
-# Statement keywords that identify a brace-delimited chunk as an attempted Jinja tag
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
-
-# Dict methods that win over a same-named key during Jinja attribute lookup, e.g. {{ r.items }}
 _DICT_METHOD = r"(?:clear|copy|fromkeys|get|items|keys|pop|popitem|setdefault|update|values)"
 
 
@@ -18,7 +15,6 @@ def validate_template_jinja(full_text: str) -> list[str]:
 
     Returns:
         List of warning messages describing any malformed Jinja2 syntax.
-        Empty list if template is valid.
     """
     lines = full_text.split("\n")
 
@@ -29,12 +25,10 @@ def validate_template_jinja(full_text: str) -> list[str]:
     warnings.extend(_check_mismatched_tags(full_text))
 
     if not warnings:
-        # Fall back to Jinja's own parser only when the checks above found nothing. It reports the
-        # same problems in less readable terms, so running both would duplicate every error.
+        # Fall back to Jinja's own parser only when the checks above found nothing
         warnings.extend(_check_jinja_syntax(full_text))
 
-    # Runs outside the gate above: a valid template can still contain this, and it must not
-    # suppress the syntax errors that gate reports.
+    # Check conflict object definitions that happen for valid jinja templates
     warnings.extend(_check_dict_method_attributes(lines))
     return warnings
 

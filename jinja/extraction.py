@@ -6,15 +6,7 @@ from typing import Literal, TypedDict
 from jinja2 import TemplateSyntaxError, meta, nodes
 from jinja2.visitor import NodeVisitor
 
-from .jinja_utils import (
-    NamePathSegment,
-    PathSegment,
-    format_warning,
-    name_path,
-    parse_template,
-    target_names,
-    unwrap_filters,
-)
+from .jinja_utils import NamePathSegment, format_warning, name_path, parse_template, target_names, unwrap_filters
 
 SchemaType = Literal["string", "boolean", "list", "object"]
 ItemFormat = Literal["string", "object"]
@@ -128,8 +120,6 @@ def find_schema_conflicts(text: str) -> list[str]:
                 ),
             )
         )
-    # The same mistake repeated on one line produces the same message twice, and the UI keys
-    # warnings by their text.
     return list(dict.fromkeys(conflicts))
 
 
@@ -257,7 +247,7 @@ class _SchemaVisitor(NodeVisitor):
         if not name:
             return
         root, segments = name
-        if self._lookup_frame(root) or any(segment is PathSegment.LIST_INDEX for segment in segments):
+        if self._lookup_frame(root) or any(isinstance(segment, int) for segment in segments):
             return
         self.printed.append((self.lineno, root, [segment for segment in segments if isinstance(segment, str)]))
 
@@ -351,7 +341,7 @@ class _SchemaVisitor(NodeVisitor):
         path = [root]
 
         for segment in attrs:
-            if segment is PathSegment.LIST_INDEX:
+            if isinstance(segment, int):
                 if not key:
                     return None
                 container = self._ensure_container(container, key, as_list=True)
