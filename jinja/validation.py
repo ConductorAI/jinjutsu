@@ -26,9 +26,8 @@ def validate_template_jinja(full_text: str) -> list[str]:
     warnings.extend(_check_mismatched_tags(full_text))
 
     if not warnings:
-        # Only use jinja checker only if the checker we wrote didn't pick up any issues
-        # If we use both checkers there will be duplicate errors
-        # The jinja checker error messages are not as easy to read as the ones we emit from our custom checks
+        # Fall back to Jinja's own parser only when the checks above found nothing. It reports the
+        # same problems in less readable terms, so running both would duplicate every error.
         warnings.extend(_check_jinja_syntax(full_text))
 
     # Runs outside the gate above: a valid template can still contain this, and it must not
@@ -67,30 +66,30 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
                 )
 
         # Check for incomplete variable tags ({{ without }} or with only one })
-        if re.search(r"\{\{[^}]*\}(?!\})", line):
-            match = re.search(r"\{\{[^}]*\}(?!\})", line)
-            if match:
-                incomplete_tag = match.group(0)
-                fixed_tag = incomplete_tag + "}"
-                warnings.append(
-                    f"Line {line_num}: Missing closing '}}}}' in variable tag\n"
-                    f"  Found: {incomplete_tag}\n"
-                    f"  Fix:   {fixed_tag}\n"
-                    f"  {line}"
-                )
+        if match := re.search(r"\{\{[^}]*\}(?!\})", line):
+            incomplete_tag = match.group(0)
+            fixed_tag = incomplete_tag + "}"
+            warnings.append(
+                f"Line {line_num}: Missing closing '}}}}' in variable tag\n"
+                f"  Found: {incomplete_tag}\n"
+                f"  Fix:   {fixed_tag}\n"
+                f"  {line}"
+            )
 
         # Check for incomplete statement tags ({% without %} or with only one %)
-        if re.search(r"\{%[^}]*(?<!%)(?<!%\s)\}(?!\})", line) and not re.search(r"\{%[^}]*%\}", line):
-            match = re.search(r"\{%[^}]*\}", line)
-            if match:
-                incomplete_tag = match.group(0)
-                fixed_tag = incomplete_tag[:-1] + "%}"
-                warnings.append(
-                    f"Line {line_num}: Missing closing '%}}}}' in statement tag\n"
-                    f"  Found: {incomplete_tag}\n"
-                    f"  Fix:   {fixed_tag}\n"
-                    f"  {line}"
-                )
+        if (
+            re.search(r"\{%[^}]*(?<!%)(?<!%\s)\}(?!\})", line)
+            and not re.search(r"\{%[^}]*%\}", line)
+            and (match := re.search(r"\{%[^}]*\}", line))
+        ):
+            incomplete_tag = match.group(0)
+            fixed_tag = incomplete_tag[:-1] + "%}"
+            warnings.append(
+                f"Line {line_num}: Missing closing '%}}}}' in statement tag\n"
+                f"  Found: {incomplete_tag}\n"
+                f"  Fix:   {fixed_tag}\n"
+                f"  {line}"
+            )
 
     warnings.extend(_check_misplaced_statement_delimiters(lines))
     warnings.extend(_check_hyphenated_variables(lines))
