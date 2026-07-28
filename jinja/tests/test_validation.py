@@ -125,6 +125,44 @@ def test_dict_method_field_beside_a_string_literal_is_still_reported():
     assert not any("Field 'values'" in w for w in warnings)
 
 
+def test_one_field_read_twice_in_a_tag_is_one_warning_fixing_both():
+    text = "{{ a.items if flag else b.items }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert len(warnings) == 1
+    assert "Fix:   {{ a['items'] if flag else b['items'] }}" in warnings[0]
+
+
+def test_two_different_dict_method_fields_in_a_tag_are_one_warning():
+    text = "{{ a.items if flag else b.values }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert len(warnings) == 1
+    assert "Fields 'items' and 'values' collide with built-in dict methods" in warnings[0]
+    assert "Fix:   {{ a['items'] if flag else b['values'] }}" in warnings[0]
+
+
+def test_three_dict_method_fields_in_a_tag_read_as_a_list():
+    text = "{{ a.items ~ b.values ~ c.keys }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert len(warnings) == 1
+    assert "Fields 'items', 'values', and 'keys' collide with built-in dict methods" in warnings[0]
+    assert "Fix:   {{ a['items'] ~ b['values'] ~ c['keys'] }}" in warnings[0]
+
+
+def test_field_name_inside_a_literal_is_not_rewritten_by_the_fix():
+    text = "{{ r.items if scope == 'a.items' else f }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert len(warnings) == 1
+    assert "Fix:   {{ r['items'] if scope == 'a.items' else f }}" in warnings[0]
+
+
 def test_numeric_subtraction_is_not_flagged_as_a_hyphenated_variable():
     text = "{{ 2024-1 }} and {{ 1.5-0.5 }}"
 

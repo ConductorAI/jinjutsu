@@ -1,4 +1,5 @@
 import re
+from collections.abc import Iterable
 
 from jinja2 import TemplateSyntaxError
 
@@ -185,16 +186,29 @@ def _check_dict_method_attributes(lines: list[str]) -> list[str]:
     for line_num, line in enumerate(lines, start=1):
         for tag in re.finditer(r"\{[%{].*?[%}]\}", line):
             tag_text = tag.group()
-            for match in re.finditer(rf"\.({_DICT_METHOD})\b(?!\s*\()", _blank_string_literals(tag_text)):
-                field = match.group(1)
-                warnings.append(
-                    f"Line {line_num}: Field '{field}' collides with a built-in dict method\n"
-                    f"  Found: {tag_text}\n"
-                    f"  Fix:   {tag_text.replace('.' + field, f'[{field!r}]')}\n"
-                    f"  Reason: Jinja reads '.{field}' as the dictionary's own method, so the "
-                    f"document renders the method instead of your value. Use bracket syntax.\n"
-                    f"  {line}"
+            matches = list(re.finditer(rf"\.({_DICT_METHOD})\b(?!\s*\()", _blank_string_literals(tag_text)))
+            if not matches:
+                continue
+            fields = list(dict.fromkeys(match.group(1) for match in matches))
+            if len(fields) == 1:
+                headline = f"Field '{fields[0]}' collides with a built-in dict method"
+                reason = (
+                    f"Jinja reads '.{fields[0]}' as the dictionary's own method, so the document "
+                    f"renders the method instead of your value."
                 )
+            else:
+                headline = f"Fields {_join_quoted(fields)} collide with built-in dict methods"
+                reason = (
+                    f"Jinja reads {_join_quoted(f'.{field}' for field in fields)} as the dictionary's "
+                    f"own methods, so the document renders the methods instead of your values."
+                )
+            warnings.append(
+                f"Line {line_num}: {headline}\n"
+                f"  Found: {tag_text}\n"
+                f"  Fix:   {_bracket_matches(tag_text, matches)}\n"
+                f"  Reason: {reason} Use bracket syntax.\n"
+                f"  {line}"
+            )
     return warnings
 
 
@@ -229,6 +243,20 @@ def _check_jinja_syntax(full_text: str) -> list[str]:
         warnings.append(warning)
 
     return warnings
+
+
+def _bracket_matches(tag_text: str, matches: list[re.Match[str]]) -> str:
+    """Rewrite each '.field' match as bracket access, right to left so earlier offsets stay valid."""
+    for match in reversed(matches):
+        tag_text = f"{tag_text[: match.start()]}[{match.group(1)!r}]{tag_text[match.end() :]}"
+    return tag_text
+
+
+def _join_quoted(names: Iterable[str]) -> str:
+    quoted = [f"'{name}'" for name in names]
+    if len(quoted) == 2:
+        return " and ".join(quoted)
+    return ", ".join(quoted[:-1]) + f", and {quoted[-1]}"
 
 
 def _blank_string_literals(tag_text: str) -> str:
