@@ -22,6 +22,32 @@ def test_extracts_all_docxtpl_loop_prefixes():
         assert "items" in variables, prefix
 
 
+def test_docxtpl_cell_tags_supply_their_argument_as_a_variable():
+    text = "{% colspan col_count %}{% cellbg row_color %}{{ title }}"
+
+    variables = analyze_template(text).variables
+
+    assert variables["col_count"] == {"type": "string"}
+    assert variables["row_color"] == {"type": "string"}
+    assert variables["title"] == {"type": "string"}
+
+
+def test_docxtpl_merge_tags_supply_no_variable():
+    text = "{%tr for r in rows %}{% vm %}{% hm %}{{ r.name }}{%tr endfor %}"
+
+    variables = analyze_template(text).variables
+
+    assert sorted(variables) == ["rows"]
+
+
+def test_merge_tag_name_is_still_usable_as_a_variable():
+    text = "{{ vm }} and {% if hm %}{{ hm.label }}{% endif %}"
+
+    variables = analyze_template(text).variables
+
+    assert sorted(variables) == ["hm", "vm"]
+
+
 def test_plain_for_loop_still_extracted():
     text = "{% for row in rows %}{{ row.value }}{% endfor %}"
 

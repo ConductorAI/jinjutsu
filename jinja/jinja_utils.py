@@ -7,6 +7,9 @@ JINJA_ENV = Environment()
 # docxtpl adds row/cell/paragraph/run prefixes to Jinja tags, e.g. {%tr for ... %} or {{r ... }}
 DOCXTPL_TAG_PREFIX = r"(?:tr|tc|p|r)"
 
+_DOCXTPL_MERGE_TAG = r"\{%\s*(?:vm|hm)\s*%\}"
+_DOCXTPL_CELL_TAG = r"\{%\s*(?:colspan|cellbg)\s+([^%]*?)\s*%\}"
+
 # A property name, or a list subscript such as the 0 in items[0].name
 NamePathSegment = str | int
 
@@ -35,8 +38,16 @@ def format_warning(
 
 
 def normalize_docxtpl_prefixes(text: str) -> str:
-    """Strip docxtpl row/cell/paragraph/run prefixes so vanilla Jinja can parse the tags."""
-    return re.sub(rf"(\{{[%{{]){DOCXTPL_TAG_PREFIX}?\s+", r"\1 ", text)
+    """
+    Rewrite docxtpl's own tag syntax as vanilla Jinja so the parser accepts it.
+
+    Strips the row/cell/paragraph/run prefixes, drops the {% vm %} and {% hm %} cell merges, and
+    rewrites {% colspan n %} and {% cellbg c %} to {{ n }} and {{ c }}, the substitution docxtpl
+    itself performs.
+    """
+    text = re.sub(rf"(\{{[%{{]){DOCXTPL_TAG_PREFIX}?\s+", r"\1 ", text)
+    text = re.sub(_DOCXTPL_MERGE_TAG, "", text)
+    return re.sub(_DOCXTPL_CELL_TAG, r"{{ \1 }}", text)
 
 
 def parse_template(text: str) -> nodes.Template:

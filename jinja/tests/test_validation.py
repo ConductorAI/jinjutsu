@@ -35,6 +35,16 @@ def test_docxtpl_prefixed_variable_is_not_a_syntax_error():
     assert not warnings
 
 
+def test_docxtpl_table_tags_are_not_syntax_errors():
+    text = (
+        "{%tr for r in rows %}{% vm %}{% hm %}{% colspan col_count %}{% cellbg row_color %}{{ r.name }}{%tr endfor %}"
+    )
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
 def test_whitespace_control_tags_do_not_trip_mismatch_check():
     text = "{%- if flag %}{{ value }}{%- endif %}{%- for row in rows -%}{{ row.name }}{%- endfor -%}"
 
