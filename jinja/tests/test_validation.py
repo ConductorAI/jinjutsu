@@ -1,6 +1,16 @@
 from conduit.server.features.doj.templates.validation import validate_template_jinja
 
 
+def test_warning_titles_render_jinja_delimiters_literally():
+    assert any("Missing closing '%}' in statement tag" in w for w in validate_template_jinja("{% oops }"))
+    assert any("Missing closing '}}' in variable tag" in w for w in validate_template_jinja("{{ oops }"))
+    assert any("Use '{% for %}' not '{%  for %}'" in w for w in validate_template_jinja("{% if a b c %}x{% endif %}"))
+    assert any(
+        "Missing closing tag like '{% endfor %}' or '{% endif %}'" in w
+        for w in validate_template_jinja("{% set greeting %}Hello")
+    )
+
+
 def test_docxtpl_prefixed_tags_do_not_trip_mismatch_check():
     text = "{%tr for row in funding_rows %}{%tr if row.active %}{{ row.source }}{%tr endif %}{%tr endfor %}"
 

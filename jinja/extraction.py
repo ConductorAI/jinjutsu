@@ -6,7 +6,15 @@ from typing import Literal, TypedDict
 from jinja2 import TemplateSyntaxError, meta, nodes
 from jinja2.visitor import NodeVisitor
 
-from .jinja_utils import NamePathSegment, PathSegment, name_path, parse_template, target_names, unwrap_filters
+from .jinja_utils import (
+    NamePathSegment,
+    PathSegment,
+    format_warning,
+    name_path,
+    parse_template,
+    target_names,
+    unwrap_filters,
+)
 
 SchemaType = Literal["string", "boolean", "list", "object"]
 ItemFormat = Literal["string", "object"]
@@ -103,15 +111,22 @@ def find_schema_conflicts(text: str) -> list[str]:
         if node_type not in ("object", "list") or path in visitor.conflict_paths:
             continue
         if node_type == "object":
-            article, rendered, fix = "an object", "{'field': ...}", f"print a single field, e.g. {{{{ {path}.field }}}}"
+            article, rendered = "an object", "{'field': ...}"
+            fix = "print a single field, e.g. {{ " + path + ".field }}"
         else:
-            article, rendered, fix = "a list", "['item', ...]", f"loop over it with {{% for item in {path} %}}"
+            article, rendered = "a list", "['item', ...]"
+            fix = "loop over it with {% for item in " + path + " %}"
         conflicts.append(
-            f"Line {lineno}: '{path}' is printed as a whole {node_type}\n"
-            f"  Found: {{{{ {path} }}}}\n"
-            f"  Fix:   {fix}\n"
-            f"  Reason: the template also reads fields from '{path}', so it receives {article}. "
-            f"Printing it renders {rendered} into the document.\n"
+            format_warning(
+                line_no=lineno,
+                title=f"'{path}' is printed as a whole {node_type}",
+                found="{{ " + path + " }}",
+                fix=fix,
+                reason=(
+                    f"the template also reads fields from '{path}', so it receives {article}. "
+                    f"Printing it renders {rendered} into the document."
+                ),
+            )
         )
     # The same mistake repeated on one line produces the same message twice, and the UI keys
     # warnings by their text.
@@ -348,20 +363,32 @@ class _SchemaVisitor(NodeVisitor):
             self.conflict_paths.add(path)
         if existing_type == "list":
             self.conflicts.append(
-                f"Line {self.lineno}: '{path}' is used as both a list and an object\n"
-                f"  Found: {path}.{segment}\n"
-                f"  Fix:   loop over '{path}' and read '{segment}' from the loop item, or give the "
-                f"two uses different names\n"
-                f"  Reason: the template also loops over '{path}'. A list has no named fields, so "
-                f"'{path}.{segment}' renders empty.\n"
+                format_warning(
+                    line_no=self.lineno,
+                    title=f"'{path}' is used as both a list and an object",
+                    found=f"{path}.{segment}",
+                    fix=(
+                        f"loop over '{path}' and read '{segment}' from the loop item, or give the "
+                        f"two uses different names"
+                    ),
+                    reason=(
+                        f"the template also loops over '{path}'. A list has no named fields, so "
+                        f"'{path}.{segment}' renders empty."
+                    ),
+                )
             )
         elif existing_type in ("string", "boolean"):
             self.conflicts.append(
-                f"Line {self.lineno}: '{path}' is used as both a value and an object\n"
-                f"  Found: {path}.{segment}\n"
-                f"  Fix:   give the two uses different names\n"
-                f"  Reason: the template also uses '{path}' as a single value, so it cannot also "
-                f"carry a '{segment}' field. One of the two renders empty.\n"
+                format_warning(
+                    line_no=self.lineno,
+                    title=f"'{path}' is used as both a value and an object",
+                    found=f"{path}.{segment}",
+                    fix="give the two uses different names",
+                    reason=(
+                        f"the template also uses '{path}' as a single value, so it cannot also "
+                        f"carry a '{segment}' field. One of the two renders empty."
+                    ),
+                )
             )
 
     def _ensure_container(self, container: dict[str, SchemaField], key: str, as_list: bool) -> dict[str, SchemaField]:

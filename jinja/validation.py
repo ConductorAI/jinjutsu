@@ -3,7 +3,7 @@ from collections.abc import Iterable
 
 from jinja2 import TemplateSyntaxError
 
-from .jinja_utils import DOCXTPL_TAG_PREFIX, parse_template
+from .jinja_utils import DOCXTPL_TAG_PREFIX, format_warning, parse_template
 
 # Statement keywords that identify a brace-delimited chunk as an attempted Jinja tag
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
@@ -24,6 +24,8 @@ def validate_template_jinja(full_text: str) -> list[str]:
 
     warnings = []
     warnings.extend(_check_malformed_tags(lines))
+    warnings.extend(_check_misplaced_statement_delimiters(lines))
+    warnings.extend(_check_hyphenated_variables(lines))
     warnings.extend(_check_mismatched_tags(full_text))
 
     if not warnings:
@@ -46,35 +48,41 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
             match = re.search(r"\{\s+%.*?%\s*\}", line)
             if match:
                 malformed_tag = match.group(0)
-                fixed_tag = malformed_tag.replace("{ ", "{").replace(" }", "}")
                 warnings.append(
-                    f"Line {line_num}: Extra space after '{{' in tag\n"
-                    f"  Found: {malformed_tag}\n"
-                    f"  Fix:   {fixed_tag}\n"
-                    f"  {line}"
+                    format_warning(
+                        line_no=line_num,
+                        title="Extra space after '{' in tag",
+                        found=malformed_tag,
+                        fix=malformed_tag.replace("{ ", "{").replace(" }", "}"),
+                        source_line=line,
+                    )
                 )
         # Check for % } instead of %}
         elif re.search(r"%\s+\}", line) and not re.search(r"\{\s+%", line):
             match = re.search(r"\{%.*?%\s+\}", line)
             if match:
                 malformed_tag = match.group(0)
-                fixed_tag = malformed_tag.replace("{ ", "{").replace(" }", "}")
                 warnings.append(
-                    f"Line {line_num}: Extra space before '}}' in tag\n"
-                    f"  Found: {malformed_tag}\n"
-                    f"  Fix:   {fixed_tag}\n"
-                    f"  {line}"
+                    format_warning(
+                        line_no=line_num,
+                        title="Extra space before '}' in tag",
+                        found=malformed_tag,
+                        fix=malformed_tag.replace("{ ", "{").replace(" }", "}"),
+                        source_line=line,
+                    )
                 )
 
         # Check for incomplete variable tags ({{ without }} or with only one })
         if match := re.search(r"\{\{[^}]*\}(?!\})", line):
             incomplete_tag = match.group(0)
-            fixed_tag = incomplete_tag + "}"
             warnings.append(
-                f"Line {line_num}: Missing closing '}}}}' in variable tag\n"
-                f"  Found: {incomplete_tag}\n"
-                f"  Fix:   {fixed_tag}\n"
-                f"  {line}"
+                format_warning(
+                    line_no=line_num,
+                    title="Missing closing '}}' in variable tag",
+                    found=incomplete_tag,
+                    fix=incomplete_tag + "}",
+                    source_line=line,
+                )
             )
 
         # Check for incomplete statement tags ({% without %} or with only one %)
@@ -84,16 +92,15 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
             and (match := re.search(r"\{%[^}]*\}", line))
         ):
             incomplete_tag = match.group(0)
-            fixed_tag = incomplete_tag[:-1] + "%}"
             warnings.append(
-                f"Line {line_num}: Missing closing '%}}}}' in statement tag\n"
-                f"  Found: {incomplete_tag}\n"
-                f"  Fix:   {fixed_tag}\n"
-                f"  {line}"
+                format_warning(
+                    line_no=line_num,
+                    title="Missing closing '%}' in statement tag",
+                    found=incomplete_tag,
+                    fix=incomplete_tag[:-1] + "%}",
+                    source_line=line,
+                )
             )
-
-    warnings.extend(_check_misplaced_statement_delimiters(lines))
-    warnings.extend(_check_hyphenated_variables(lines))
 
     return warnings
 
@@ -114,15 +121,18 @@ def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
             if re.match(r"\s*%", content):
                 # '{ % if x %}' is the extra-space case, already reported by _check_malformed_tags
                 continue
-            malformed_tag = match.group(0)
-            fixed_tag = f"{{% {content.replace('%', '').strip()} %}}"
             warnings.append(
-                f"Line {line_num}: Misplaced '%' in statement tag\n"
-                f"  Found: {malformed_tag}\n"
-                f"  Fix:   {fixed_tag}\n"
-                f"  Reason: A statement tag must open with '{{%'. Jinja reads this as plain text, "
-                f"so its matching end tag will be reported as an error elsewhere.\n"
-                f"  {line}"
+                format_warning(
+                    line_no=line_num,
+                    title="Misplaced '%' in statement tag",
+                    found=match.group(0),
+                    fix="{% " + content.replace("%", "").strip() + " %}",
+                    reason=(
+                        "A statement tag must open with '{%'. Jinja reads this as plain text, so "
+                        "its matching end tag will be reported as an error elsewhere."
+                    ),
+                    source_line=line,
+                )
             )
     return warnings
 
@@ -137,14 +147,15 @@ def _check_hyphenated_variables(lines: list[str]) -> list[str]:
                 # {{ 2024-01 }} is arithmetic on literals, not a variable name
                 continue
             if "-" in var_name:
-                suggested_name = var_name.replace("-", "_")
                 warnings.append(
-                    f"Line {line_num}: Variable name contains hyphen(s)\n"
-                    f"  Found: {{{{{var_name}}}}}\n"
-                    f"  Fix:   {{{{{suggested_name}}}}}\n"
-                    f"  Reason: Jinja2 interprets hyphens as subtraction operators. "
-                    f"Use underscores instead.\n"
-                    f"  {line}"
+                    format_warning(
+                        line_no=line_num,
+                        title="Variable name contains hyphen(s)",
+                        found="{{" + var_name + "}}",
+                        fix="{{" + var_name.replace("-", "_") + "}}",
+                        reason=("Jinja2 interprets hyphens as subtraction operators. Use underscores instead."),
+                        source_line=line,
+                    )
                 )
     return warnings
 
@@ -203,11 +214,14 @@ def _check_dict_method_attributes(lines: list[str]) -> list[str]:
                     f"own methods, so the document renders the methods instead of your values."
                 )
             warnings.append(
-                f"Line {line_num}: {headline}\n"
-                f"  Found: {tag_text}\n"
-                f"  Fix:   {_bracket_matches(tag_text, matches)}\n"
-                f"  Reason: {reason} Use bracket syntax.\n"
-                f"  {line}"
+                format_warning(
+                    line_no=line_num,
+                    title=headline,
+                    found=tag_text,
+                    fix=_bracket_matches(tag_text, matches),
+                    reason=f"{reason} Use bracket syntax.",
+                    source_line=line,
+                )
             )
     return warnings
 
@@ -228,11 +242,11 @@ def _check_jinja_syntax(full_text: str) -> list[str]:
                 line_preview = f"  {lines[e.lineno - 1]}"
 
         if "expected token 'end of statement block'" in error_msg.lower():
-            guidance = "Extra spaces in tag? Use '{{% for %}}' not '{{%  for %}}'"
+            guidance = "Extra spaces in tag? Use '{% for %}' not '{%  for %}'"
         elif "unexpected end of template" in error_msg.lower():
-            guidance = "Missing closing tag like '{{% endfor %}}' or '{{% endif %}}'"
+            guidance = "Missing closing tag like '{% endfor %}' or '{% endif %}'"
         elif "expected name or number" in error_msg.lower():
-            guidance = "Invalid variable name in '{{{{ }}}}' or '{{% %}}' tag"
+            guidance = "Invalid variable name in '{{ }}' or '{% %}' tag"
         else:
             guidance = "Check for typos or formatting issues"
 
