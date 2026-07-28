@@ -100,7 +100,7 @@ def test_bare_indexed_access_is_list_of_strings():
 
     variables = extract_template_variables(text)
 
-    assert variables["items"] == {"type": "list", "item_format": "string", "properties": {}}
+    assert variables["items"] == {"type": "list", "item_format": "string"}
 
 
 def test_indexed_access_nested_under_object():
@@ -266,6 +266,35 @@ def test_nested_loops_build_nested_list_of_objects():
     }
 
 
+def test_filtered_iterable_is_still_a_list():
+    text = "{% for x in items | sort %}{{ x.name }}{% endfor %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["items"] == {
+        "type": "list",
+        "item_format": "object",
+        "properties": {"name": {"type": "string"}},
+    }
+
+
+def test_filter_arguments_are_still_extracted():
+    text = "{% for row in rows | batch(columns) %}{{ row.name }}{% endfor %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["rows"]["type"] == "list"
+    assert variables["columns"] == {"type": "string"}
+
+
+def test_truthiness_guard_refines_into_an_object():
+    text = "{% if section %}{{ section.title }}{% endif %}"
+
+    variables = extract_template_variables(text)
+
+    assert variables["section"] == {"type": "object", "properties": {"title": {"type": "string"}}}
+
+
 def test_bare_loop_item_is_list_of_strings():
     text = "{% for c in countries %}{{ c }}{% endfor %}"
 
@@ -335,6 +364,46 @@ def test_whole_list_printed_is_reported():
 
     assert len(conflicts) == 1
     assert "'items' is printed as a whole list" in conflicts[0]
+
+
+def test_truthiness_guard_before_field_access_is_not_a_conflict():
+    assert find_schema_conflicts("{% if section %}{{ section.title }}{% endif %}") == []
+    assert find_schema_conflicts("{% if s.header %}{{ s.header.title }}{% endif %}") == []
+    assert find_schema_conflicts("{% for r in rows %}{% if r.meta %}{{ r.meta.id }}{% endif %}{% endfor %}") == []
+
+
+def test_boolean_comparison_before_field_access_is_still_a_conflict():
+    text = "{% if section == true %}{{ section.title }}{% endif %}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert len(conflicts) == 1
+    assert "'section' is used as both a value and an object" in conflicts[0]
+
+
+def test_guarded_path_printed_as_a_value_is_still_a_conflict():
+    text = "{% if section %}{{ section }}{{ section.title }}{% endif %}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert len(conflicts) == 1
+    assert "'section' is used as both a value and an object" in conflicts[0]
+
+
+def test_repeated_conflicting_access_is_reported_once():
+    text = "{% for x in a.b %}{{ x.c }}{% endfor %}{{ a.b.d }} and {{ a.b.d }}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert len(conflicts) == 1
+
+
+def test_repeated_whole_container_print_is_reported_once():
+    text = "{{ a.b }}{{ a }} and {{ a }}"
+
+    conflicts = find_schema_conflicts(text)
+
+    assert len(conflicts) == 1
 
 
 def test_conflict_cites_the_line_of_the_offending_expression():

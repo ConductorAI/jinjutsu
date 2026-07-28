@@ -63,6 +63,13 @@ def name_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
     return None
 
 
+def unwrap_filters(node: nodes.Node) -> nodes.Node:
+    """Strip filter applications from an expression, so `items | sort | unique` yields `items`."""
+    while isinstance(node, nodes.Filter) and node.node:
+        node = node.node
+    return node
+
+
 def target_names(target: nodes.Node) -> list[str]:
     """Names bound by a for-loop target or set assignment (handles tuple unpacking)."""
     if isinstance(target, nodes.Name):

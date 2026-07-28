@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from enum import Enum, auto
 from typing import Literal, TypedDict
 
 from jinja2 import TemplateSyntaxError, meta, nodes
 from jinja2.visitor import NodeVisitor
 
-from .jinja_utils import NamePathSegment, PathSegment, name_path, parse_template, target_names
+from .jinja_utils import NamePathSegment, PathSegment, name_path, parse_template, target_names, unwrap_filters
 
 SchemaType = Literal["string", "boolean", "list", "object"]
 ItemFormat = Literal["string", "object"]
@@ -18,6 +19,17 @@ class _SchemaFieldBase(TypedDict):
 class SchemaField(_SchemaFieldBase, total=False):
     item_format: ItemFormat
     properties: dict[str, SchemaField]
+
+
+class _LeafUse(Enum):
+    """How a path was used, which decides both its type and whether a later field read conflicts."""
+
+    # Read for its value, e.g. {{ x }} or {% if x == 'FINAL' %}
+    VALUE = auto()
+    # Tested for truthiness, e.g. {% if x %}
+    GUARD = auto()
+    # Compared against a boolean literal, e.g. {% if x == true %}
+    BOOLEAN = auto()
 
 
 def extract_template_variables(text: str) -> dict[str, SchemaField]:
@@ -101,7 +113,9 @@ def find_schema_conflicts(text: str) -> list[str]:
             f"  Reason: the template also reads fields from '{path}', so it receives {article}. "
             f"Printing it renders {rendered} into the document.\n"
         )
-    return conflicts
+    # The same mistake repeated on one line produces the same message twice, and the UI keys
+    # warnings by their text.
+    return list(dict.fromkeys(conflicts))
 
 
 def _lookup_path(schema: dict[str, SchemaField], root: str, attrs: list[str]) -> SchemaField | None:
@@ -123,6 +137,7 @@ def _refine_list_formats(schema: dict[str, SchemaField]) -> None:
                 _refine_list_formats(var_info["properties"])
             else:
                 var_info["item_format"] = "string"
+                var_info.pop("properties", None)
         elif var_info.get("type") == "object":
             _refine_list_formats(var_info.get("properties", {}))
 
@@ -145,6 +160,9 @@ class _SchemaVisitor(NodeVisitor):
         self.scope: list[dict[str, SchemaField]] = [{}]
         self.conflicts: list[str] = []
         self.conflict_paths: set[str] = set()
+        # Leaves seen only as a truthiness guard. That test says nothing about the shape of the
+        # value, so a later field read refines the leaf into an object instead of conflicting.
+        self.guarded: list[SchemaField] = []
         # Paths printed on their own, as {{ a.b }} rather than inside a larger expression
         self.printed: list[tuple[int, str, list[str]]] = []
         self.lineno = 0
@@ -170,7 +188,9 @@ class _SchemaVisitor(NodeVisitor):
     def visit_For(self, node: nodes.For) -> None:  # noqa: N802
         self.lineno = node.iter.lineno
         frame: dict[str, SchemaField] = {}
-        name = name_path(node.iter)
+        # A filtered iterable is still the same list, e.g. {% for x in items | sort %}
+        # Any names in the filter arguments are covered by find_undeclared_variables.
+        name = name_path(unwrap_filters(node.iter))
         if not name:
             self._record_load(node.iter)
         list_node: SchemaField = self._ensure_list(*name) if name else {"type": "list"}
@@ -221,7 +241,7 @@ class _SchemaVisitor(NodeVisitor):
             return
         name = name_path(node)
         if name:
-            self._record_path(*name, leaf_bool=False)
+            self._record_path(*name, use=_LeafUse.VALUE)
             return
         for child in node.iter_child_nodes():
             self._record_load(child)
@@ -238,7 +258,7 @@ class _SchemaVisitor(NodeVisitor):
             return
         name = name_path(node)
         if name:
-            self._record_path(*name, leaf_bool=True)
+            self._record_path(*name, use=_LeafUse.GUARD)
             return
         self._record_load(node)
 
@@ -259,15 +279,15 @@ class _SchemaVisitor(NodeVisitor):
         name = name_path(node.expr)
         if not name:
             return False
-        self._record_path(*name, leaf_bool=True)
+        self._record_path(*name, use=_LeafUse.BOOLEAN)
         return True
 
-    def _record_path(self, root: str, attrs: list[NamePathSegment], leaf_bool: bool) -> None:
+    def _record_path(self, root: str, attrs: list[NamePathSegment], use: _LeafUse) -> None:
         resolved = self._resolve(root, attrs)
         if not resolved:
             return
         container, key = resolved
-        self._set_leaf(container, key, leaf_bool)
+        self._set_leaf(container, key, use)
 
     def _ensure_list(self, root: str, attrs: list[NamePathSegment]) -> SchemaField:
         # item_format is assigned later by _refine_list_formats once the item's shape is known.
@@ -320,6 +340,9 @@ class _SchemaVisitor(NodeVisitor):
     def _record_container_conflict(self, container: dict[str, SchemaField], key: str, path: str, segment: str) -> None:
         """Note a field read from a path the template has already established as a list or a value."""
         existing = container.get(key)
+        if any(leaf is existing for leaf in self.guarded):
+            # {% if section %}{{ section.title }}{% endif %} is a common way to guard an optional object, not a clash
+            return
         existing_type = existing.get("type") if existing else None
         if existing_type in ("list", "string", "boolean"):
             self.conflict_paths.add(path)
@@ -349,11 +372,18 @@ class _SchemaVisitor(NodeVisitor):
         container[key] = {"type": "list" if as_list else "object", "properties": properties}
         return properties
 
-    def _set_leaf(self, container: dict[str, SchemaField], key: str, leaf_bool: bool) -> None:
+    def _set_leaf(self, container: dict[str, SchemaField], key: str, use: _LeafUse) -> None:
         existing = container.get(key)
         if not existing:
-            container[key] = {"type": "boolean"} if leaf_bool else {"type": "string"}
-        elif existing.get("type") == "boolean" and not leaf_bool:
+            leaf: SchemaField = {"type": "string"} if use is _LeafUse.VALUE else {"type": "boolean"}
+            container[key] = leaf
+            if use is _LeafUse.GUARD:
+                self.guarded.append(leaf)
+            return
+        if use is not _LeafUse.GUARD:
+            # Any other use pins the leaf's shape, so it is no longer refinable.
+            self.guarded = [leaf for leaf in self.guarded if leaf is not existing]
+        if existing.get("type") == "boolean" and use is _LeafUse.VALUE:
             existing["type"] = "string"
 
     def _lookup_frame(self, name: str) -> dict[str, SchemaField] | None:
