@@ -1,5 +1,5 @@
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 
 from jinja2 import TemplateSyntaxError
 
@@ -33,9 +33,9 @@ def validate_template_jinja(full_text: str) -> list[str]:
 
     # These run below the gate. A template can be valid and still hit them, and none of them says
     # anything about whether it parses, so none may hide a syntax error from the fallback.
-    warnings.extend(_check_hyphenated_variables(lines))
-    warnings.extend(_check_builtin_method_attributes(lines))
-    warnings.extend(_check_merge_tags_outside_loops(lines))
+    warnings.extend(_check_hyphenated_variables(full_text))
+    warnings.extend(_check_builtin_method_attributes(full_text))
+    warnings.extend(_check_merge_tags_outside_loops(full_text))
     return warnings
 
 
@@ -151,7 +151,7 @@ def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
     return warnings
 
 
-def _check_hyphenated_variables(lines: list[str]) -> list[str]:
+def _check_hyphenated_variables(full_text: str) -> list[str]:
     """
     Check for names containing hyphens, which Jinja2 interprets as subtraction.
 
@@ -159,25 +159,24 @@ def _check_hyphenated_variables(lines: list[str]) -> list[str]:
     left alone, as is the spaced {{ a - b }} form and the whitespace control in {%- if x %}.
     """
     warnings = []
-    for line_num, line in enumerate(lines, start=1):
-        for tag in re.finditer(r"\{[%{].*?[%}]\}", line):
-            for match in _HYPHENATED_NAME.finditer(_blank_string_literals(tag.group())):
-                name = match.group()
-                warnings.append(
-                    format_warning(
-                        line_no=line_num,
-                        title="Variable name contains hyphen(s)",
-                        found=name,
-                        fix=name.replace("-", "_"),
-                        reason=(
-                            f"Jinja2 reads the hyphen as subtraction, not as part of a name. If you "
-                            f"meant a single variable, use the underscored form above. If you meant "
-                            f"to subtract, write {name.replace('-', ' - ')} with spaces and this "
-                            f"warning will clear."
-                        ),
-                        source_line=line,
-                    )
+    for line_num, line, tag_text in _iter_tags(full_text):
+        for match in _HYPHENATED_NAME.finditer(_blank_string_literals(tag_text)):
+            name = match.group()
+            warnings.append(
+                format_warning(
+                    line_no=line_num,
+                    title="Variable name contains hyphen(s)",
+                    found=name,
+                    fix=name.replace("-", "_"),
+                    reason=(
+                        f"Jinja2 reads the hyphen as subtraction, not as part of a name. If you "
+                        f"meant a single variable, use the underscored form above. If you meant "
+                        f"to subtract, write {name.replace('-', ' - ')} with spaces and this "
+                        f"warning will clear."
+                    ),
+                    source_line=line,
                 )
+            )
     return warnings
 
 
@@ -206,7 +205,7 @@ def _check_mismatched_tags(full_text: str) -> list[str]:
     return warnings
 
 
-def _check_builtin_method_attributes(lines: list[str]) -> list[str]:
+def _check_builtin_method_attributes(full_text: str) -> list[str]:
     """
     Check for fields read with dot syntax whose name is also a built-in dict or list method.
 
@@ -217,39 +216,37 @@ def _check_builtin_method_attributes(lines: list[str]) -> list[str]:
     explicit call like x.items() is deliberate and is left alone.
     """
     warnings = []
-    for line_num, line in enumerate(lines, start=1):
-        for tag in re.finditer(r"\{[%{].*?[%}]\}", line):
-            tag_text = tag.group()
-            matches = list(re.finditer(rf"\.({_BUILTIN_METHOD})\b(?!\s*\()", _blank_string_literals(tag_text)))
-            if not matches:
-                continue
-            fields = list(dict.fromkeys(match.group(1) for match in matches))
-            if len(fields) == 1:
-                headline = f"Field '{fields[0]}' collides with a built-in method"
-                reason = (
-                    f"Jinja reads '.{fields[0]}' as the value's own method, so the document "
-                    f"renders the method instead of your value."
-                )
-            else:
-                headline = f"Fields {_join_quoted(fields)} collide with built-in methods"
-                reason = (
-                    f"Jinja reads {_join_quoted(f'.{field}' for field in fields)} as the value's "
-                    f"own methods, so the document renders the methods instead of your values."
-                )
-            warnings.append(
-                format_warning(
-                    line_no=line_num,
-                    title=headline,
-                    found=tag_text,
-                    fix=_bracket_matches(tag_text, matches),
-                    reason=f"{reason} Use bracket syntax.",
-                    source_line=line,
-                )
+    for line_num, line, tag_text in _iter_tags(full_text):
+        matches = list(re.finditer(rf"\.({_BUILTIN_METHOD})\b(?!\s*\()", _blank_string_literals(tag_text)))
+        if not matches:
+            continue
+        fields = list(dict.fromkeys(match.group(1) for match in matches))
+        if len(fields) == 1:
+            headline = f"Field '{fields[0]}' collides with a built-in method"
+            reason = (
+                f"Jinja reads '.{fields[0]}' as the value's own method, so the document "
+                f"renders the method instead of your value."
             )
+        else:
+            headline = f"Fields {_join_quoted(fields)} collide with built-in methods"
+            reason = (
+                f"Jinja reads {_join_quoted(f'.{field}' for field in fields)} as the value's "
+                f"own methods, so the document renders the methods instead of your values."
+            )
+        warnings.append(
+            format_warning(
+                line_no=line_num,
+                title=headline,
+                found=tag_text,
+                fix=_bracket_matches(tag_text, matches),
+                reason=f"{reason} Use bracket syntax.",
+                source_line=line,
+            )
+        )
     return warnings
 
 
-def _check_merge_tags_outside_loops(lines: list[str]) -> list[str]:
+def _check_merge_tags_outside_loops(full_text: str) -> list[str]:
     """
     Check for a docxtpl cell merge, {% vm %} or {% hm %}, used outside a loop.
 
@@ -259,8 +256,8 @@ def _check_merge_tags_outside_loops(lines: list[str]) -> list[str]:
     """
     warnings = []
     depth = 0
-    for line_num, line in enumerate(lines, start=1):
-        for match in re.finditer(rf"\{{%-?\s*{DOCXTPL_TAG_PREFIX}?\s*(for|endfor|vm|hm)\b", line):
+    for line_num, line, tag_text in _iter_tags(full_text):
+        if match := re.match(rf"\{{%-?\s*{DOCXTPL_TAG_PREFIX}?\s*(for|endfor|vm|hm)\b", tag_text):
             keyword = match.group(1)
             if keyword == "for":
                 depth += 1
@@ -329,6 +326,24 @@ def _join_quoted(names: Iterable[str]) -> str:
     if len(quoted) == 2:
         return " and ".join(quoted)
     return ", ".join(quoted[:-1]) + f", and {quoted[-1]}"
+
+
+def _iter_tags(full_text: str) -> Iterator[tuple[int, str, str]]:
+    """
+    Yield (line number, source line, tag text) for every Jinja tag, in document order.
+
+    Word puts a paragraph break wherever the author pressed Enter, so a tag can arrive split over
+    two lines. docxtpl rejoins those before rendering, which makes them valid templates that a
+    line-scoped regex would never see. Matching over the whole text keeps them visible, with the
+    newlines folded out so the tag reads as one line in the warning.
+
+    A tag body stops at the next opening delimiter, so an unclosed '{{' runs out rather than
+    swallowing the prose between it and whatever '}}' comes next.
+    """
+    lines = full_text.split("\n")
+    for match in re.finditer(r"\{[%{](?:(?!\{[%{]).)*?[%}]\}", full_text, re.DOTALL):
+        line_no = full_text.count("\n", 0, match.start()) + 1
+        yield line_no, lines[line_no - 1], re.sub(r"\s*\n\s*", " ", match.group())
 
 
 def _blank_string_literals(tag_text: str) -> str:
