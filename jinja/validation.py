@@ -6,7 +6,10 @@ from jinja2 import TemplateSyntaxError
 from .jinja_utils import DOCXTPL_TAG_PREFIX, format_warning, parse_template
 
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
-_DICT_METHOD = r"(?:clear|copy|fromkeys|get|items|keys|pop|popitem|setdefault|update|values)"
+_BUILTIN_METHOD = (
+    r"(?:append|clear|copy|count|extend|fromkeys|get|index|insert|items|keys|pop|popitem|remove"
+    r"|reverse|setdefault|sort|update|values)"
+)
 
 
 def validate_template_jinja(full_text: str) -> list[str]:
@@ -30,7 +33,7 @@ def validate_template_jinja(full_text: str) -> list[str]:
     # These run below the gate. A template can be valid and still hit them, and neither says
     # anything about whether it parses, so neither may hide a syntax error from the fallback.
     warnings.extend(_check_hyphenated_variables(lines))
-    warnings.extend(_check_dict_method_attributes(lines))
+    warnings.extend(_check_builtin_method_attributes(lines))
     return warnings
 
 
@@ -199,32 +202,34 @@ def _check_mismatched_tags(full_text: str) -> list[str]:
     return warnings
 
 
-def _check_dict_method_attributes(lines: list[str]) -> list[str]:
+def _check_builtin_method_attributes(lines: list[str]) -> list[str]:
     """
-    Check for fields read with dot syntax whose name is also a built-in dict method.
+    Check for fields read with dot syntax whose name is also a built-in dict or list method.
 
-    Jinja resolves x.items to the dict's own method before looking for an "items" key, so the
-    document renders the method object. Bracket syntax has no such ambiguity. An explicit call
-    like x.items() is deliberate and is left alone.
+    Jinja resolves x.items to the value's own method before looking for an "items" field, so the
+    document renders the method object. Which names collide depends on whether the value arrives
+    as a dict or a list, so every name either type defines is reported. Bracket syntax is never
+    ambiguous, so following the fix is safe even where the dotted form would have worked. An
+    explicit call like x.items() is deliberate and is left alone.
     """
     warnings = []
     for line_num, line in enumerate(lines, start=1):
         for tag in re.finditer(r"\{[%{].*?[%}]\}", line):
             tag_text = tag.group()
-            matches = list(re.finditer(rf"\.({_DICT_METHOD})\b(?!\s*\()", _blank_string_literals(tag_text)))
+            matches = list(re.finditer(rf"\.({_BUILTIN_METHOD})\b(?!\s*\()", _blank_string_literals(tag_text)))
             if not matches:
                 continue
             fields = list(dict.fromkeys(match.group(1) for match in matches))
             if len(fields) == 1:
-                headline = f"Field '{fields[0]}' collides with a built-in dict method"
+                headline = f"Field '{fields[0]}' collides with a built-in method"
                 reason = (
-                    f"Jinja reads '.{fields[0]}' as the dictionary's own method, so the document "
+                    f"Jinja reads '.{fields[0]}' as the value's own method, so the document "
                     f"renders the method instead of your value."
                 )
             else:
-                headline = f"Fields {_join_quoted(fields)} collide with built-in dict methods"
+                headline = f"Fields {_join_quoted(fields)} collide with built-in methods"
                 reason = (
-                    f"Jinja reads {_join_quoted(f'.{field}' for field in fields)} as the dictionary's "
+                    f"Jinja reads {_join_quoted(f'.{field}' for field in fields)} as the value's "
                     f"own methods, so the document renders the methods instead of your values."
                 )
             warnings.append(

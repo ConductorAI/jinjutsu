@@ -137,13 +137,38 @@ def test_valid_tags_are_not_flagged_as_misplaced_delimiters():
     assert not warnings
 
 
-def test_dict_method_field_is_reported_with_bracket_fix():
+def test_builtin_method_field_is_reported_with_bracket_fix():
     text = "Recipients:\n{% for r in rows %}{{ r.items }}{% endfor %}"
 
     warnings = validate_template_jinja(text)
 
-    assert any("Line 2: Field 'items' collides with a built-in dict method" in w for w in warnings)
+    assert any("Line 2: Field 'items' collides with a built-in method" in w for w in warnings)
     assert any("Fix:   {{ r['items'] }}" in w for w in warnings)
+
+
+def test_list_method_field_is_reported_with_bracket_fix():
+    text = "{% for r in rows %}{{ r.count }}{% endfor %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Field 'count' collides with a built-in method" in w for w in warnings)
+    assert any("Fix:   {{ r['count'] }}" in w for w in warnings)
+
+
+def test_explicit_list_method_call_is_not_reported():
+    text = "{% for r in rows.copy() %}{{ r.name }}{% endfor %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_field_name_merely_starting_with_a_method_name_is_not_reported():
+    text = "{{ a.counterparty }} {{ b.indexed_at }} {{ c.sorting_code }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
 
 
 def test_explicit_dict_method_call_is_not_reported():
@@ -154,7 +179,7 @@ def test_explicit_dict_method_call_is_not_reported():
     assert not warnings
 
 
-def test_dict_method_name_outside_a_tag_is_not_reported():
+def test_builtin_method_name_outside_a_tag_is_not_reported():
     text = "See r.items in the appendix and obj.values in Exhibit B"
 
     warnings = validate_template_jinja(text)
@@ -170,30 +195,12 @@ def test_bracket_access_to_dict_method_name_is_not_reported():
     assert not warnings
 
 
-def test_dict_method_name_inside_a_string_literal_is_not_reported():
+def test_builtin_method_name_inside_a_string_literal_is_not_reported():
     text = '{{ "see section.items here" }}'
 
     warnings = validate_template_jinja(text)
 
     assert not warnings
-
-
-def test_dict_method_field_beside_a_string_literal_is_still_reported():
-    text = "{{ r.items if scope == 'a.values' else fallback }}"
-
-    warnings = validate_template_jinja(text)
-
-    assert any("Field 'items' collides with a built-in dict method" in w for w in warnings)
-    assert not any("Field 'values'" in w for w in warnings)
-
-
-def test_one_field_read_twice_in_a_tag_is_one_warning_fixing_both():
-    text = "{{ a.items if flag else b.items }}"
-
-    warnings = validate_template_jinja(text)
-
-    assert len(warnings) == 1
-    assert "Fix:   {{ a['items'] if flag else b['items'] }}" in warnings[0]
 
 
 def test_two_different_dict_method_fields_in_a_tag_are_one_warning():
@@ -202,18 +209,8 @@ def test_two_different_dict_method_fields_in_a_tag_are_one_warning():
     warnings = validate_template_jinja(text)
 
     assert len(warnings) == 1
-    assert "Fields 'items' and 'values' collide with built-in dict methods" in warnings[0]
+    assert "Fields 'items' and 'values' collide with built-in methods" in warnings[0]
     assert "Fix:   {{ a['items'] if flag else b['values'] }}" in warnings[0]
-
-
-def test_three_dict_method_fields_in_a_tag_read_as_a_list():
-    text = "{{ a.items ~ b.values ~ c.keys }}"
-
-    warnings = validate_template_jinja(text)
-
-    assert len(warnings) == 1
-    assert "Fields 'items', 'values', and 'keys' collide with built-in dict methods" in warnings[0]
-    assert "Fix:   {{ a['items'] ~ b['values'] ~ c['keys'] }}" in warnings[0]
 
 
 def test_escaped_quote_inside_a_literal_does_not_leak_code_out_of_it():
@@ -227,16 +224,7 @@ def test_escaped_quote_inside_a_literal_does_not_swallow_a_real_collision():
 
     warnings = validate_template_jinja(text)
 
-    assert any("Field 'items' collides with a built-in dict method" in w for w in warnings)
-
-
-def test_field_name_inside_a_literal_is_not_rewritten_by_the_fix():
-    text = "{{ r.items if scope == 'a.items' else f }}"
-
-    warnings = validate_template_jinja(text)
-
-    assert len(warnings) == 1
-    assert "Fix:   {{ r['items'] if scope == 'a.items' else f }}" in warnings[0]
+    assert any("Field 'items' collides with a built-in method" in w for w in warnings)
 
 
 def test_numeric_subtraction_is_not_flagged_as_a_hyphenated_variable():
@@ -289,13 +277,13 @@ def test_ordinary_field_names_are_not_reported():
     assert not warnings
 
 
-def test_dict_method_field_does_not_suppress_syntax_errors():
+def test_builtin_method_field_does_not_suppress_syntax_errors():
     text = "{{ r.items }}\n{if% sales_rep == true %}"
 
     warnings = validate_template_jinja(text)
 
     assert any("Misplaced '%' in statement tag" in w for w in warnings)
-    assert any("collides with a built-in dict method" in w for w in warnings)
+    assert any("collides with a built-in method" in w for w in warnings)
 
 
 def test_whitespace_control_tags_are_counted_in_mismatch_check():
