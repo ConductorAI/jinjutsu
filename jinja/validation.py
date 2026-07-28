@@ -21,14 +21,15 @@ def validate_template_jinja(full_text: str) -> list[str]:
     warnings = []
     warnings.extend(_check_malformed_tags(lines))
     warnings.extend(_check_misplaced_statement_delimiters(lines))
-    warnings.extend(_check_hyphenated_variables(lines))
     warnings.extend(_check_mismatched_tags(full_text))
 
     if not warnings:
         # Fall back to Jinja's own parser only when the checks above found nothing
         warnings.extend(_check_jinja_syntax(full_text))
 
-    # Check conflict object definitions that happen for valid jinja templates
+    # These run below the gate. A template can be valid and still hit them, and neither says
+    # anything about whether it parses, so neither may hide a syntax error from the fallback.
+    warnings.extend(_check_hyphenated_variables(lines))
     warnings.extend(_check_dict_method_attributes(lines))
     return warnings
 

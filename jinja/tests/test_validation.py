@@ -230,6 +230,15 @@ def test_numeric_subtraction_leaves_a_real_syntax_error_intact():
     assert any("Error: expected token 'end of print statement'" in w for w in warnings)
 
 
+def test_hyphen_warning_does_not_hide_a_syntax_error():
+    text = "{{ fiscal-year }}\n{% set g %}Hello"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Variable name contains hyphen(s)" in w for w in warnings)
+    assert any("Missing closing tag" in w for w in warnings)
+
+
 def test_hyphenated_variable_name_is_still_flagged():
     text = "{{ fiscal-year }}"
 
