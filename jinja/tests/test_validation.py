@@ -71,6 +71,23 @@ def test_extra_space_after_brace_is_reported_only_once():
     assert not any("Misplaced '%' in statement tag" in w for w in warnings)
 
 
+def test_split_opening_brace_is_reported():
+    text = "Total: { { amount }} due"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Line 1: Extra space after '{' in variable tag" in w for w in warnings)
+    assert any("Fix:   {{ amount }}" in w for w in warnings)
+
+
+def test_split_braces_on_both_ends_are_reported_with_one_fix():
+    text = "{ { amount } }"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Fix:   {{ amount }}" in w for w in warnings)
+
+
 def test_extra_space_before_closing_brace_is_reported():
     text = "{% if alpha % }body{% endif %}"
 

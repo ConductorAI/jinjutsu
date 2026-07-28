@@ -67,6 +67,20 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
                     )
                 )
 
+        # Check for { { instead of {{
+        if match := re.search(r"\{\s+\{.*?\}\s*\}", line):
+            malformed_tag = match.group(0)
+            warnings.append(
+                format_warning(
+                    line_no=line_num,
+                    title="Extra space after '{' in variable tag",
+                    found=malformed_tag,
+                    fix=re.sub(r"\}\s+\}", "}}", re.sub(r"\{\s+\{", "{{", malformed_tag)),
+                    reason="Jinja reads this as plain text, so the value never reaches the document.",
+                    source_line=line,
+                )
+            )
+
         # Check for incomplete variable tags ({{ without }} or with only one })
         if match := re.search(r"\{\{[^}]*\}(?!\})", line):
             incomplete_tag = match.group(0)
