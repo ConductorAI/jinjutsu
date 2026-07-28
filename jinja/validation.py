@@ -1,9 +1,7 @@
 import re
 from collections.abc import Iterable, Iterator
 
-from jinja2 import TemplateSyntaxError
-
-from .jinja_utils import DOCXTPL_TAG_PREFIX, format_warning, parse_template
+from .jinja_utils import DOCXTPL_TAG_PREFIX, format_warning, parse_result
 
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
 _HYPHENATED_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*(?:\.\w+)*(?:-[A-Za-z_]\w*)+")
@@ -286,9 +284,7 @@ def _check_jinja_syntax(full_text: str) -> list[str]:
     """Check Jinja2 syntax by attempting to parse the template."""
     warnings = []
 
-    try:
-        parse_template(full_text)
-    except TemplateSyntaxError as e:
+    if e := parse_result(full_text).error:
         error_msg = str(e)
         line_preview = ""
 

@@ -1,6 +1,8 @@
 import re
+from functools import lru_cache
+from typing import NamedTuple
 
-from jinja2 import Environment, nodes
+from jinja2 import Environment, TemplateSyntaxError, nodes
 
 JINJA_ENV = Environment()
 
@@ -12,6 +14,13 @@ _DOCXTPL_CELL_TAG = r"\{%\s*(?:colspan|cellbg)\s+([^%]*?)\s*%\}"
 
 # A property name, or a list subscript such as the 0 in items[0].name
 NamePathSegment = str | int
+
+
+class ParseResult(NamedTuple):
+    """Exactly one of these is set: a template either parses or it does not."""
+
+    ast: nodes.Template | None
+    error: TemplateSyntaxError | None
 
 
 def format_warning(
@@ -41,21 +50,36 @@ def normalize_docxtpl_prefixes(text: str) -> str:
     """
     Rewrite docxtpl's own tag syntax as vanilla Jinja so the parser accepts it.
 
-    Strips the row/cell/paragraph/run prefixes, drops the {% vm %} and {% hm %} cell merges, and
+    Blanks the row/cell/paragraph/run prefixes and the {% vm %} and {% hm %} cell merges, and
     rewrites {% colspan n %} and {% cellbg c %} to {{ n }} and {{ c }}, the substitution docxtpl
     itself performs.
+
+    Every rewrite keeps the character count and the newline positions of what it replaces, so an
+    offset into the result addresses the same character in the original text and a line number
+    taken from the AST is a line number in the file the user uploaded. Whitespace inside a tag is
+    insignificant to Jinja, which is what leaves room to pad. Widening or narrowing the text here
+    would silently shift every warning that follows a docxtpl tag, and dropping a newline would
+    shift every warning in the rest of the template.
     """
-    text = re.sub(rf"(\{{[%{{]){DOCXTPL_TAG_PREFIX}?\s+", r"\1 ", text)
-    text = re.sub(_DOCXTPL_MERGE_TAG, "", text)
-    return re.sub(_DOCXTPL_CELL_TAG, r"{{ \1 }}", text)
+    text = re.sub(rf"(\{{[%{{])({DOCXTPL_TAG_PREFIX})(?=\s)", lambda m: m.group(1) + _blank(m.group(2)), text)
+    text = re.sub(_DOCXTPL_MERGE_TAG, lambda m: _blank(m.group()), text)
+    return re.sub(_DOCXTPL_CELL_TAG, _pad_cell_tag, text)
 
 
-def parse_template(text: str) -> nodes.Template:
-    """Normalize docxtpl prefixes and parse the template into a Jinja AST.
-
-    Raises TemplateSyntaxError if the template is malformed.
+@lru_cache(maxsize=4)
+def parse_result(text: str) -> ParseResult:
     """
-    return JINJA_ENV.parse(normalize_docxtpl_prefixes(text))
+    Normalize docxtpl prefixes and parse the template, reporting failure instead of raising.
+
+    Cached because the variable extraction and the syntax check both need this and would otherwise
+    each pay for a parse. Returning the error rather than raising it is what makes the cache cover
+    a malformed template too, since lru_cache does not store exceptions. Callers only read the
+    AST, so they can share one.
+    """
+    try:
+        return ParseResult(JINJA_ENV.parse(normalize_docxtpl_prefixes(text)), None)
+    except TemplateSyntaxError as e:
+        return ParseResult(None, e)
 
 
 def name_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
@@ -98,3 +122,19 @@ def target_names(target: nodes.Node) -> list[str]:
     if isinstance(target, nodes.Tuple):
         return [item.name for item in target.items if isinstance(item, nodes.Name)]
     return []
+
+
+def _blank(text: str) -> str:
+    "Replace every character with a space, keeping newlines so line numbers do not move"
+    return re.sub(r"[^\n]", " ", text)
+
+
+def _pad_cell_tag(match: re.Match[str]) -> str:
+    """
+    Rewrite {% colspan n %} as {{ n }}, padded inside the braces back to the original width.
+
+    The shortest form the pattern can match is {%colspan n %}, which leaves room for the padding.
+    """
+    expression = match.group(1)
+    padding = len(match.group()) - len("{{  }}") - len(expression)
+    return "{{ " + expression + " " * padding + " }}"

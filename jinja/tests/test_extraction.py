@@ -451,6 +451,22 @@ def test_conflict_cites_the_line_of_the_offending_expression():
     assert any("Line 4:" in c for c in conflicts)
 
 
+def test_tag_spanning_lines_does_not_shift_later_line_numbers():
+    text = "{%\n  if alpha %}{{ alpha }}{% endif %}\n{{ alpha.beta }}"
+
+    conflicts = analyze_template(text).conflicts
+
+    assert any("Line 3:" in c for c in conflicts)
+
+
+def test_docxtpl_tag_spanning_lines_does_not_shift_later_line_numbers():
+    text = "{%tr\n  for r in rows %}{{ r.a }}{%tr endfor %}\n{{ alpha }}\n{{ alpha.beta }}"
+
+    conflicts = analyze_template(text).conflicts
+
+    assert any("Line 4:" in c for c in conflicts)
+
+
 def test_filtered_list_is_not_a_conflict():
     text = '{% for x in items %}{{ x.c }}{% endfor %}Total: {{ items | length }}{{ items | join(", ") }}'
 
