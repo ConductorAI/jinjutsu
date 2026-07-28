@@ -297,8 +297,12 @@ def _check_jinja_syntax(full_text: str) -> list[str]:
             if 0 < e.lineno <= len(lines):
                 line_preview = f"  {lines[e.lineno - 1]}"
 
-        if "expected token 'end of statement block'" in error_msg.lower():
-            guidance = "Extra spaces in tag? Use '{% for %}' not '{%  for %}'"
+        if leftover := re.search(r"expected token 'end of statement block', got '(.+?)'", error_msg):
+            token = leftover.group(1)
+            if token == "=":
+                guidance = "Use '==' to compare. A single '=' only assigns, and only in '{% set %}'"
+            else:
+                guidance = f"Unexpected '{token}' after the expression. The tag holds one expression, nothing more"
         elif "unexpected end of template" in error_msg.lower():
             guidance = "Missing closing tag like '{% endfor %}' or '{% endif %}'"
         elif "expected name or number" in error_msg.lower():

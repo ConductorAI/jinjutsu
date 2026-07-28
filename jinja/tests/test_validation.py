@@ -4,11 +4,32 @@ from conduit.server.features.doj.templates.validation import validate_template_j
 def test_warning_titles_render_jinja_delimiters_literally():
     assert any("Missing closing '%}' in statement tag" in w for w in validate_template_jinja("{% oops }"))
     assert any("Missing closing '}}' in variable tag" in w for w in validate_template_jinja("{{ oops }"))
-    assert any("Use '{% for %}' not '{%  for %}'" in w for w in validate_template_jinja("{% if a b c %}x{% endif %}"))
+    assert any(
+        "A single '=' only assigns, and only in '{% set %}'" in w
+        for w in validate_template_jinja("{% if status = 'FINAL' %}y{% endif %}")
+    )
     assert any(
         "Missing closing tag like '{% endfor %}' or '{% endif %}'" in w
         for w in validate_template_jinja("{% set greeting %}Hello")
     )
+
+
+def test_single_equals_in_a_condition_suggests_the_comparison_operator():
+    warnings = validate_template_jinja("{% if status = 'FINAL' %}y{% endif %}")
+
+    assert any("Use '==' to compare" in w for w in warnings)
+
+
+def test_comparison_operator_is_not_reported():
+    warnings = validate_template_jinja("{% if status == 'FINAL' %}y{% endif %}")
+
+    assert not warnings
+
+
+def test_leftover_token_in_a_tag_names_the_token():
+    warnings = validate_template_jinja("{% if a b c %}x{% endif %}")
+
+    assert any("Unexpected 'b' after the expression" in w for w in warnings)
 
 
 def test_docxtpl_prefixed_tags_do_not_trip_mismatch_check():
