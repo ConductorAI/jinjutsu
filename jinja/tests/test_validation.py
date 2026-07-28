@@ -108,6 +108,49 @@ def test_bracket_access_to_dict_method_name_is_not_reported():
     assert not warnings
 
 
+def test_dict_method_name_inside_a_string_literal_is_not_reported():
+    text = '{{ "see section.items here" }}'
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_dict_method_field_beside_a_string_literal_is_still_reported():
+    text = "{{ r.items if scope == 'a.values' else fallback }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Field 'items' collides with a built-in dict method" in w for w in warnings)
+    assert not any("Field 'values'" in w for w in warnings)
+
+
+def test_numeric_subtraction_is_not_flagged_as_a_hyphenated_variable():
+    text = "{{ 2024-1 }} and {{ 1.5-0.5 }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_numeric_subtraction_leaves_a_real_syntax_error_intact():
+    # Jinja rejects the leading zero in '01' on its own; only the rename suggestion is suppressed.
+    text = "{{ 2024-01 }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not any("hyphen" in w for w in warnings)
+    assert any("Error: expected token 'end of print statement'" in w for w in warnings)
+
+
+def test_hyphenated_variable_name_is_still_flagged():
+    text = "{{ fiscal-year }}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Variable name contains hyphen(s)" in w for w in warnings)
+
+
 def test_ordinary_field_names_are_not_reported():
     text = "{% for r in rows %}{{ r.name }}{{ r.title }}{% endfor %}"
 

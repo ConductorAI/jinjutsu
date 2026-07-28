@@ -133,6 +133,9 @@ def _check_hyphenated_variables(lines: list[str]) -> list[str]:
     for line_num, line in enumerate(lines, start=1):
         for match in re.finditer(r"\{\{\s*([\w.\-]+)\s*\}\}", line):
             var_name = match.group(1)
+            if re.fullmatch(r"[\d.\-]+", var_name):
+                # {{ 2024-01 }} is arithmetic on literals, not a variable name
+                continue
             if "-" in var_name:
                 suggested_name = var_name.replace("-", "_")
                 warnings.append(
@@ -183,7 +186,7 @@ def _check_dict_method_attributes(lines: list[str]) -> list[str]:
     for line_num, line in enumerate(lines, start=1):
         for tag in re.finditer(r"\{[%{].*?[%}]\}", line):
             tag_text = tag.group()
-            for match in re.finditer(rf"\.({_DICT_METHOD})\b(?!\s*\()", tag_text):
+            for match in re.finditer(rf"\.({_DICT_METHOD})\b(?!\s*\()", _blank_string_literals(tag_text)):
                 field = match.group(1)
                 warnings.append(
                     f"Line {line_num}: Field '{field}' collides with a built-in dict method\n"
@@ -227,3 +230,13 @@ def _check_jinja_syntax(full_text: str) -> list[str]:
         warnings.append(warning)
 
     return warnings
+
+
+def _blank_string_literals(tag_text: str) -> str:
+    """
+    Replace the contents of quoted literals with spaces, keeping the tag's length and offsets.
+
+    Text inside a literal is data, not a field path, so it must not be matched by the attribute
+    checks above.
+    """
+    return re.sub(r"'[^']*'|\"[^\"]*\"", lambda m: " " * len(m.group()), tag_text)
