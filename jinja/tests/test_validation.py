@@ -45,6 +45,37 @@ def test_docxtpl_table_tags_are_not_syntax_errors():
     assert not warnings
 
 
+def test_cell_merge_outside_a_loop_is_reported():
+    text = "intro\nApproved {% vm %} by the board"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Line 2: Cell merge is not inside a loop" in w for w in warnings)
+    assert any("Found: {% vm %}" in w for w in warnings)
+
+
+def test_horizontal_merge_outside_a_loop_is_reported():
+    warnings = validate_template_jinja("{% hm %}Total")
+
+    assert any("Cell merge is not inside a loop" in w for w in warnings)
+
+
+def test_cell_merge_inside_a_docxtpl_loop_is_not_reported():
+    text = "{%tr for r in rows %}{% vm %}{% hm %}{{ r.name }}{%tr endfor %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
+
+
+def test_cell_merge_after_a_loop_closes_is_reported():
+    text = "{% for r in rows %}{{ r.name }}{% endfor %}\n{% vm %}Total"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Line 2: Cell merge is not inside a loop" in w for w in warnings)
+
+
 def test_whitespace_control_tags_do_not_trip_mismatch_check():
     text = "{%- if flag %}{{ value }}{%- endif %}{%- for row in rows -%}{{ row.name }}{%- endfor -%}"
 

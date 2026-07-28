@@ -31,10 +31,11 @@ def validate_template_jinja(full_text: str) -> list[str]:
         # Fall back to Jinja's own parser only when the checks above found nothing
         warnings.extend(_check_jinja_syntax(full_text))
 
-    # These run below the gate. A template can be valid and still hit them, and neither says
-    # anything about whether it parses, so neither may hide a syntax error from the fallback.
+    # These run below the gate. A template can be valid and still hit them, and none of them says
+    # anything about whether it parses, so none may hide a syntax error from the fallback.
     warnings.extend(_check_hyphenated_variables(lines))
     warnings.extend(_check_builtin_method_attributes(lines))
+    warnings.extend(_check_merge_tags_outside_loops(lines))
     return warnings
 
 
@@ -245,6 +246,41 @@ def _check_builtin_method_attributes(lines: list[str]) -> list[str]:
                     source_line=line,
                 )
             )
+    return warnings
+
+
+def _check_merge_tags_outside_loops(lines: list[str]) -> list[str]:
+    """
+    Check for a docxtpl cell merge, {% vm %} or {% hm %}, used outside a loop.
+
+    docxtpl expands both into {% if loop.first %}, so without an enclosing {% for %} the document
+    fails to render. normalize_docxtpl_prefixes drops these tags before parsing, so Jinja never
+    sees them and the syntax fallback cannot report this on its own.
+    """
+    warnings = []
+    depth = 0
+    for line_num, line in enumerate(lines, start=1):
+        for match in re.finditer(rf"\{{%-?\s*{DOCXTPL_TAG_PREFIX}?\s*(for|endfor|vm|hm)\b", line):
+            keyword = match.group(1)
+            if keyword == "for":
+                depth += 1
+            elif keyword == "endfor":
+                depth = max(depth - 1, 0)
+            elif not depth:
+                warnings.append(
+                    format_warning(
+                        line_no=line_num,
+                        title="Cell merge is not inside a loop",
+                        found="{% " + keyword + " %}",
+                        fix="move it into the {% for %} whose rows it should merge across, or delete it",
+                        reason=(
+                            f"'{keyword}' merges a cell with the copies a loop makes of it, so docxtpl "
+                            f"renders it as a check on the first iteration. With no loop to belong to, "
+                            f"the document fails with \"'loop' is undefined\"."
+                        ),
+                        source_line=line,
+                    )
+                )
     return warnings
 
 
