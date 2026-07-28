@@ -6,6 +6,7 @@ from jinja2 import TemplateSyntaxError
 from .jinja_utils import DOCXTPL_TAG_PREFIX, format_warning, parse_template
 
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
+_HYPHENATED_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*(?:\.\w+)*(?:-[A-Za-z_]\w*)+")
 _BUILTIN_METHOD = (
     r"(?:append|clear|copy|count|extend|fromkeys|get|index|insert|items|keys|pop|popitem|remove"
     r"|reverse|setdefault|sort|update|values)"
@@ -150,26 +151,28 @@ def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
 
 
 def _check_hyphenated_variables(lines: list[str]) -> list[str]:
-    """Check for variables containing hyphens, which Jinja2 interprets as subtraction."""
+    """
+    Check for names containing hyphens, which Jinja2 interprets as subtraction.
+
+    Both sides of the hyphen must start a name, so {{ 2024-01 }} is arithmetic on literals and is
+    left alone, as is the spaced {{ a - b }} form and the whitespace control in {%- if x %}.
+    """
     warnings = []
     for line_num, line in enumerate(lines, start=1):
-        for match in re.finditer(r"\{\{\s*([\w.\-]+)\s*\}\}", line):
-            var_name = match.group(1)
-            if re.fullmatch(r"[\d.\-]+", var_name):
-                # {{ 2024-01 }} is arithmetic on literals, not a variable name
-                continue
-            if "-" in var_name:
-                spaced = "{{ " + var_name.replace("-", " - ") + " }}"
+        for tag in re.finditer(r"\{[%{].*?[%}]\}", line):
+            for match in _HYPHENATED_NAME.finditer(_blank_string_literals(tag.group())):
+                name = match.group()
                 warnings.append(
                     format_warning(
                         line_no=line_num,
                         title="Variable name contains hyphen(s)",
-                        found="{{" + var_name + "}}",
-                        fix="{{" + var_name.replace("-", "_") + "}}",
+                        found=name,
+                        fix=name.replace("-", "_"),
                         reason=(
                             f"Jinja2 reads the hyphen as subtraction, not as part of a name. If you "
                             f"meant a single variable, use the underscored form above. If you meant "
-                            f"to subtract, write {spaced} with spaces and this warning will clear."
+                            f"to subtract, write {name.replace('-', ' - ')} with spaces and this "
+                            f"warning will clear."
                         ),
                         source_line=line,
                     )

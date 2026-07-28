@@ -265,8 +265,29 @@ def test_hyphenated_variable_name_is_still_flagged():
 def test_hyphen_warning_offers_a_spaced_form_that_clears_it():
     warnings = validate_template_jinja("{{ total-discount }}")
 
-    assert any("write {{ total - discount }} with spaces" in w for w in warnings)
+    assert any("write total - discount with spaces" in w for w in warnings)
     assert not validate_template_jinja("{{ total - discount }}")
+
+
+def test_hyphenated_name_inside_a_statement_tag_is_flagged():
+    warnings = validate_template_jinja("{% if fiscal-year %}x{% endif %}")
+
+    assert any("Variable name contains hyphen(s)" in w for w in warnings)
+    assert any("Fix:   fiscal_year" in w for w in warnings)
+
+
+def test_hyphenated_loop_source_is_flagged():
+    warnings = validate_template_jinja("{% for r in funding-rows %}{{ r.name }}{% endfor %}")
+
+    assert any("Found: funding-rows" in w for w in warnings)
+
+
+def test_hyphen_inside_a_string_literal_is_not_flagged():
+    text = "{% if scope == 'fiscal-year' %}x{% endif %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert not warnings
 
 
 def test_ordinary_field_names_are_not_reported():
