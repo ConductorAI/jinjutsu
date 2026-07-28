@@ -303,6 +303,11 @@ def _check_jinja_syntax(full_text: str) -> list[str]:
                 guidance = "Use '==' to compare. A single '=' only assigns, and only in '{% set %}'"
             else:
                 guidance = f"Unexpected '{token}' after the expression. The tag holds one expression, nothing more"
+        elif curly := re.search(r"unexpected char '([“”‘’])'", error_msg):
+            guidance = (
+                f"'{curly.group(1)}' is a curly quote, which Word substitutes as you type. "
+                f"Replace it with a straight ' or \""
+            )
         elif "unexpected end of template" in error_msg.lower():
             guidance = "Missing closing tag like '{% endfor %}' or '{% endif %}'"
         elif "expected name or number" in error_msg.lower():

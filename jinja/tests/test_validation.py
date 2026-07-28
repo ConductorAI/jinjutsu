@@ -26,6 +26,25 @@ def test_comparison_operator_is_not_reported():
     assert not warnings
 
 
+def test_curly_double_quote_from_word_is_named():
+    warnings = validate_template_jinja("{% if status == “FINAL” %}y{% endif %}")
+
+    assert any("is a curly quote, which Word substitutes as you type" in w for w in warnings)
+    assert any("“" in w for w in warnings)
+
+
+def test_curly_single_quote_from_word_is_named():
+    warnings = validate_template_jinja("{% if status == ‘FINAL’ %}y{% endif %}")
+
+    assert any("is a curly quote, which Word substitutes as you type" in w for w in warnings)
+
+
+def test_straight_quotes_are_not_reported():
+    warnings = validate_template_jinja("{% if status == 'FINAL' %}y{% endif %}{{ note == \"x\" }}")
+
+    assert not warnings
+
+
 def test_leftover_token_in_a_tag_names_the_token():
     warnings = validate_template_jinja("{% if a b c %}x{% endif %}")
 
