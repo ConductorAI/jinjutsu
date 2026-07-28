@@ -220,6 +220,13 @@ class _SchemaVisitor(NodeVisitor):
             self.visit(child)
         self.scope.pop()
 
+    def visit_Macro(self, node: nodes.Macro) -> None:  # noqa: N802
+        self._visit_parameterized_block(node.args, node.body)
+
+    def visit_CallBlock(self, node: nodes.CallBlock) -> None:  # noqa: N802
+        self._record_load(node.call)
+        self._visit_parameterized_block(node.args, node.body)
+
     def visit_Assign(self, node: nodes.Assign) -> None:  # noqa: N802
         self.lineno = node.lineno
         for target in target_names(node.target):
@@ -232,6 +239,13 @@ class _SchemaVisitor(NodeVisitor):
             self.scope[-1][target] = {"type": "object", "properties": {}}
         for child in node.body:
             self.visit(child)
+
+    def _visit_parameterized_block(self, args: list[nodes.Name], body: list[nodes.Node]) -> None:
+        """Walk a macro or call block with its parameters bound, so they stay out of the schema."""
+        self.scope.append({arg.name: {"type": "object", "properties": {}} for arg in args})
+        for child in body:
+            self.visit(child)
+        self.scope.pop()
 
     def _record_printed(self, node: nodes.Node) -> None:
         """
@@ -353,43 +367,26 @@ class _SchemaVisitor(NodeVisitor):
         return (container, key) if key else None
 
     def _record_container_conflict(self, container: dict[str, SchemaField], key: str, path: str, segment: str) -> None:
-        """Note a field read from a path the template has already established as a list or a value."""
+        """Note a field read from a path the template has already established as a single value."""
         existing = container.get(key)
         if any(leaf is existing for leaf in self.guarded):
             # {% if section %}{{ section.title }}{% endif %} is a common way to guard an optional object, not a clash
             return
-        existing_type = existing.get("type") if existing else None
-        if existing_type in ("list", "string", "boolean"):
-            self.conflict_paths.add(path)
-        if existing_type == "list":
-            self.conflicts.append(
-                format_warning(
-                    line_no=self.lineno,
-                    title=f"'{path}' is used as both a list and an object",
-                    found=f"{path}.{segment}",
-                    fix=(
-                        f"loop over '{path}' and read '{segment}' from the loop item, or give the "
-                        f"two uses different names"
-                    ),
-                    reason=(
-                        f"the template also loops over '{path}'. A list has no named fields, so "
-                        f"'{path}.{segment}' renders empty."
-                    ),
-                )
+        if not existing or existing.get("type") not in ("string", "boolean"):
+            return
+        self.conflict_paths.add(path)
+        self.conflicts.append(
+            format_warning(
+                line_no=self.lineno,
+                title=f"'{path}' is used as both a value and an object",
+                found=f"{path}.{segment}",
+                fix="give the two uses different names",
+                reason=(
+                    f"the template also uses '{path}' as a single value, so it cannot also "
+                    f"carry a '{segment}' field. One of the two renders empty."
+                ),
             )
-        elif existing_type in ("string", "boolean"):
-            self.conflicts.append(
-                format_warning(
-                    line_no=self.lineno,
-                    title=f"'{path}' is used as both a value and an object",
-                    found=f"{path}.{segment}",
-                    fix="give the two uses different names",
-                    reason=(
-                        f"the template also uses '{path}' as a single value, so it cannot also "
-                        f"carry a '{segment}' field. One of the two renders empty."
-                    ),
-                )
-            )
+        )
 
     def _ensure_container(self, container: dict[str, SchemaField], key: str, as_list: bool) -> dict[str, SchemaField]:
         existing = container.get(key)

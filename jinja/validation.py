@@ -147,13 +147,18 @@ def _check_hyphenated_variables(lines: list[str]) -> list[str]:
                 # {{ 2024-01 }} is arithmetic on literals, not a variable name
                 continue
             if "-" in var_name:
+                spaced = "{{ " + var_name.replace("-", " - ") + " }}"
                 warnings.append(
                     format_warning(
                         line_no=line_num,
                         title="Variable name contains hyphen(s)",
                         found="{{" + var_name + "}}",
                         fix="{{" + var_name.replace("-", "_") + "}}",
-                        reason=("Jinja2 interprets hyphens as subtraction operators. Use underscores instead."),
+                        reason=(
+                            f"Jinja2 reads the hyphen as subtraction, not as part of a name. If you "
+                            f"meant a single variable, use the underscored form above. If you meant "
+                            f"to subtract, write {spaced} with spaces and this warning will clear."
+                        ),
                         source_line=line,
                     )
                 )

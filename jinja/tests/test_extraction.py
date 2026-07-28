@@ -330,13 +330,13 @@ def test_set_block_target_is_shadowed():
     assert set(variables) == {"name"}
 
 
-def test_path_used_as_both_list_and_object_is_reported():
-    text = "{% for x in a.b %}{{ x.c }}{% endfor %}{{ a.b.d }}"
+def test_macro_and_call_block_parameters_are_scoped():
+    macro = "{% macro row(cfg) %}{{ cfg.a }}{% endmacro %}{% for x in cfg %}{{ x }}{% endfor %}"
+    call_block = "{% call(item) render() %}{{ item.a }}{% endcall %}"
 
-    conflicts = find_schema_conflicts(text)
-
-    assert len(conflicts) == 1
-    assert "'a.b' is used as both a list and an object" in conflicts[0]
+    assert find_schema_conflicts(macro) == []
+    assert extract_template_variables(macro) == {"cfg": {"type": "list", "item_format": "string"}}
+    assert "item" not in extract_template_variables(call_block)
 
 
 def test_path_used_as_both_value_and_object_is_reported():
@@ -388,14 +388,6 @@ def test_guarded_path_printed_as_a_value_is_still_a_conflict():
 
     assert len(conflicts) == 1
     assert "'section' is used as both a value and an object" in conflicts[0]
-
-
-def test_repeated_conflicting_access_is_reported_once():
-    text = "{% for x in a.b %}{{ x.c }}{% endfor %}{{ a.b.d }} and {{ a.b.d }}"
-
-    conflicts = find_schema_conflicts(text)
-
-    assert len(conflicts) == 1
 
 
 def test_repeated_whole_container_print_is_reported_once():

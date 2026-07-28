@@ -199,6 +199,13 @@ def test_hyphenated_variable_name_is_still_flagged():
     assert any("Variable name contains hyphen(s)" in w for w in warnings)
 
 
+def test_hyphen_warning_offers_a_spaced_form_that_clears_it():
+    warnings = validate_template_jinja("{{ total-discount }}")
+
+    assert any("write {{ total - discount }} with spaces" in w for w in warnings)
+    assert not validate_template_jinja("{{ total - discount }}")
+
+
 def test_ordinary_field_names_are_not_reported():
     text = "{% for r in rows %}{{ r.name }}{{ r.title }}{% endfor %}"
 
