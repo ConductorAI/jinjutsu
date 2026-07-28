@@ -49,7 +49,7 @@ def parse_template(text: str) -> nodes.Template:
 
 def name_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
     """
-    Resolve a Name / Getattr / constant Getitem chain to (root_name, path_segments), else None.
+    Reduce a Name / Getattr / constant Getitem chain to (root_name, path_segments), else None.
 
     A string subscript is a property name, so r['items'] resolves the same as r.items
     An integer subscript is a list index, kept as the int itself

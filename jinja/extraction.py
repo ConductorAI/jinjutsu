@@ -1,8 +1,36 @@
+"""
+Derive a template's variable schema from its Jinja AST.
+
+The schema is a tree of SchemaField nodes, one tree per top-level variable. For example:
+
+    {{ case.header.title }}
+    {% for s in case.sections %}{{ s.name }}{% endfor %}
+    {% if case.sealed %}SEALED{% endif %}
+
+    case                object           -> {"header": ..., "sections": [...], "sealed": true}
+    |-- header          object           -> {"title": "..."}
+    |   `-- title       string
+    |-- sections        list of objects  -> [{"name": "..."}, {"name": "..."}]
+    |   `-- name        string              a field on each section, not on the list
+    `-- sealed          boolean
+
+Objects and lists are interior nodes while strings and booleans are leaves.
+
+Two parts of the shape are easy to misread:
+- properties means one thing per type. On an object it is that object's own fields. On a list it is
+  the fields of one element, so sections.properties.name says every section has a name and never
+  that the list itself has one. A loop is what puts it there: {% for s in sections %} binds s to
+  the sections node, so {{ s.name }} writes name into that node's properties.
+- item_format says what one element of a list looks like. _refine_list_formats derives it from
+  whether the list ended up with properties, so it carries nothing the tree does not already say.
+  It exists for the agent prompt. A list of lists has no representation, so a grid is flattened.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum, auto
-from typing import Literal, TypedDict
+from typing import Literal, NamedTuple, TypedDict
 
 from jinja2 import TemplateSyntaxError, meta, nodes
 from jinja2.visitor import NodeVisitor
@@ -22,9 +50,7 @@ class SchemaField(_SchemaFieldBase, total=False):
     properties: dict[str, SchemaField]
 
 
-class _LeafUse(Enum):
-    """How a path was used, which decides both its type and whether a later field read conflicts."""
-
+class LeafUse(Enum):
     # Read for its value, e.g. {{ x }} or {% if x == 'FINAL' %}
     VALUE = auto()
     # Tested for truthiness, e.g. {% if x %}
@@ -33,67 +59,31 @@ class _LeafUse(Enum):
     BOOLEAN = auto()
 
 
-def extract_template_variables(text: str) -> dict[str, SchemaField]:
+class TemplateAnalysis(NamedTuple):
     """
-    Extract all Jinja2 variables from text with nested structure support.
+    variables: the schema tree described in the module docstring, keyed by top-level name
+    conflicts: warnings for variables used in two incompatible ways
+    """
 
-    Returns:
-        Dictionary mapping top-level variable names to their schema:
-        {
-            "RELEASE_COUNTRIES": {
-                "type": "list",
-                "item_format": "string"
-            },
-            "SECTIONS": {
-                "type": "list",
-                "item_format": "object",
-                "properties": {
-                    "TITLE": {"type": "string"},
-                    "AUTHORIZED": {
-                        "type": "list",
-                        "item_format": "object",
-                        "properties": {
-                            "TITLE": {"type": "string"},
-                            "CONTENTS": {"type": "list", "item_format": "string"}
-                        }
-                    }
-                }
-            }
-        }
-    """
+    variables: dict[str, SchemaField]
+    conflicts: list[str]
+
+
+def analyze_template(text: str) -> TemplateAnalysis:
+    """Walk a template once to derive both its variable schema and conflict warnings."""
     try:
         ast = parse_template(text)
     except TemplateSyntaxError:
-        # A template that fails to parse cannot be rendered; validate_template_jinja surfaces
-        # the syntax errors to the user, so there is no schema to produce here.
-        return {}
+        return TemplateAnalysis({}, [])
 
+    visitor = SchemaVisitor()
+    visitor.visit(ast)
+
+    # find_undeclared_variables already decides which names the template requires
+    # the visitor only supplies the structure for those variables
     required = meta.find_undeclared_variables(ast)
-
-    visitor = _SchemaVisitor()
-    visitor.visit(ast)
-
-    # find_undeclared_variables is the source of truth for which top-level names the
-    # template requires; the visitor only supplies structure for those names.
-    schema: dict[str, SchemaField] = {name: visitor.root.get(name, {"type": "string"}) for name in sorted(required)}
-    _refine_list_formats(schema)
-    return schema
-
-
-def find_schema_conflicts(text: str) -> list[str]:
-    """
-    Report places where a template uses one path in two incompatible ways.
-
-    Nothing else catches these: the schema can only describe a path one way, and Jinja renders the
-    result without error, so the document silently gets an empty field or a Python repr.
-    """
-    try:
-        ast = parse_template(text)
-    except TemplateSyntaxError:
-        return []
-
-    visitor = _SchemaVisitor()
-    visitor.visit(ast)
+    variables: dict[str, SchemaField] = {name: visitor.root.get(name, {"type": "string"}) for name in sorted(required)}
+    _refine_list_formats(variables)
 
     conflicts = list(visitor.conflicts)
     for lineno, root, attrs in visitor.printed:
@@ -121,11 +111,10 @@ def find_schema_conflicts(text: str) -> list[str]:
                 ),
             )
         )
-    return list(dict.fromkeys(conflicts))
+    return TemplateAnalysis(variables, list(dict.fromkeys(conflicts)))
 
 
 def _lookup_path(schema: dict[str, SchemaField], root: str, attrs: list[str]) -> SchemaField | None:
-    """Read a dotted path out of an already-built schema without creating anything."""
     node = schema.get(root)
     for segment in attrs:
         if not node:
@@ -135,7 +124,7 @@ def _lookup_path(schema: dict[str, SchemaField], root: str, attrs: list[str]) ->
 
 
 def _refine_list_formats(schema: dict[str, SchemaField]) -> None:
-    """Recursively refine list item_format based on whether objects have properties."""
+    """Derive item_format for every list in the tree, now that its item's fields are known."""
     for var_info in schema.values():
         if var_info.get("type") == "list":
             if "properties" in var_info and var_info["properties"]:
@@ -148,17 +137,41 @@ def _refine_list_formats(schema: dict[str, SchemaField]) -> None:
             _refine_list_formats(var_info.get("properties", {}))
 
 
-class _SchemaVisitor(NodeVisitor):
+class SchemaVisitor(NodeVisitor):
     """
-    Walk a parsed Jinja AST to infer variable type and structure (list / object / string / boolean).
+    Build the schema tree in `root` by walking the AST once.
 
-    find_undeclared_variables only decides which top-level names are referenced. This visitor
-    supplies the fields on those names so the full data shape can be generated. Loop targets and
-    set assignments are tracked as local scope so their names never leak into the schema.
+    Terms used here and in the methods below:
 
-    The walk also collects `conflicts` and `printed` for find_schema_conflicts, since only this
-    pass sees how each path is used. Every visit_* method must set `lineno`, or those warnings
-    will cite a stale line.
+    node
+        One entry in the schema tree, a SchemaField. An object or a list holds other nodes under
+        `properties`. A string or a boolean is a leaf.
+    path
+        A chain of names read from the template, such as `case.header.title`, split into a root
+        name and its following segments.
+    printed path
+        A path that is the whole of a `{{ }}` expression, so its value lands in the document.
+        `{{ case.title }}` counts. `{{ items | length }}` does not, because that prints a count
+        rather than the list.
+    local
+        A name the template invents rather than one the user supplies: a loop target, a set
+        target, or a macro, call or with block parameter.
+    frame
+        One dict mapping the locals of a single nesting level to the tree node each is bound to.
+    scope
+        The stack of frames. `visit_For` and the parameterized blocks push a frame on entry and
+        pop it on exit, and `_lookup_frame` searches the stack innermost first.
+
+    A frame holds a pointer into the tree rather than a copy, so a loop target binds to the very
+    list node it iterates and `{{ s.name }}` writes `name` into that list's properties. That is how
+    a list comes to describe its item.
+
+    A local must never be reported as a variable, since nobody supplies one. `_locate_leaf` looks a
+    leading name up in `scope` first and continues from the node it is bound to, so `s` finds
+    `sections` and is then discarded instead of becoming a key in `root`.
+
+    `conflicts` and `printed` are gathered here because only this pass sees how each path is used.
+    Every visit_* method must set `lineno`, or a warning will cite a stale line.
     """
 
     def __init__(self) -> None:
@@ -166,16 +179,13 @@ class _SchemaVisitor(NodeVisitor):
         self.scope: list[dict[str, SchemaField]] = [{}]
         self.conflicts: list[str] = []
         self.conflict_paths: set[str] = set()
-        # Leaves seen only as a truthiness guard. That test says nothing about the shape of the
-        # value, so a later field read refines the leaf into an object instead of conflicting.
+        # Leaves seen only as a truthiness guard, which says nothing about their shape
         self.guarded: list[SchemaField] = []
         # Paths printed on their own, as {{ a.b }} rather than inside a larger expression
         self.printed: list[tuple[int, str, list[str]]] = []
         self.lineno = 0
 
     def visit_Output(self, node: nodes.Output) -> None:  # noqa: N802
-        # Jinja merges a run of adjacent text and expressions into one Output node, so each child
-        # carries the only accurate line number.
         for child in node.nodes:
             self.lineno = child.lineno
             self._record_printed(child)
@@ -194,8 +204,8 @@ class _SchemaVisitor(NodeVisitor):
     def visit_For(self, node: nodes.For) -> None:  # noqa: N802
         self.lineno = node.iter.lineno
         frame: dict[str, SchemaField] = {}
-        # A filtered iterable is still the same list, e.g. {% for x in items | sort %}
-        # Any names in the filter arguments are covered by find_undeclared_variables.
+        # {% for x in items | sort %} still iterates items
+        # Filter arguments are picked up by find_undeclared_variables.
         name = name_path(unwrap_filters(node.iter))
         if not name:
             self._record_load(node.iter)
@@ -250,11 +260,6 @@ class _SchemaVisitor(NodeVisitor):
         self.scope.pop()
 
     def _record_printed(self, node: nodes.Node) -> None:
-        """
-        Note a path printed on its own, so find_schema_conflicts can catch a whole container
-        reaching the document. Only a bare path counts, so a legitimate {{ items | length }} is
-        ignored: that is a Filter, not a print of items itself.
-        """
         name = name_path(node)
         if not name:
             return
@@ -272,7 +277,7 @@ class _SchemaVisitor(NodeVisitor):
             return
         name = name_path(node)
         if name:
-            self._record_path(*name, use=_LeafUse.VALUE)
+            self._record_path(*name, use=LeafUse.VALUE)
             return
         for child in node.iter_child_nodes():
             self._record_load(child)
@@ -289,17 +294,11 @@ class _SchemaVisitor(NodeVisitor):
             return
         name = name_path(node)
         if name:
-            self._record_path(*name, use=_LeafUse.GUARD)
+            self._record_path(*name, use=LeafUse.GUARD)
             return
         self._record_load(node)
 
     def _record_boolean_comparison(self, node: nodes.Node) -> bool:
-        """
-        Record a name compared against the literal true or false as a boolean.
-
-        Only the boolean literals qualify, since no string can satisfy `x == true`. A quoted
-        `x == 'true'` is a string Const and falls through to the string path.
-        """
         if not isinstance(node, nodes.Compare) or len(node.ops) != 1:
             return False
         operand = node.ops[0]
@@ -310,22 +309,21 @@ class _SchemaVisitor(NodeVisitor):
         name = name_path(node.expr)
         if not name:
             return False
-        self._record_path(*name, use=_LeafUse.BOOLEAN)
+        self._record_path(*name, use=LeafUse.BOOLEAN)
         return True
 
-    def _record_path(self, root: str, attrs: list[NamePathSegment], use: _LeafUse) -> None:
-        resolved = self._resolve(root, attrs)
-        if not resolved:
+    def _record_path(self, root: str, attrs: list[NamePathSegment], use: LeafUse) -> None:
+        location = self._locate_leaf(root, attrs)
+        if not location:
             return
-        container, key = resolved
+        container, key = location
         self._set_leaf(container, key, use)
 
     def _ensure_list(self, root: str, attrs: list[NamePathSegment]) -> SchemaField:
-        # item_format is assigned later by _refine_list_formats once the item's shape is known.
-        resolved = self._resolve(root, attrs)
-        if not resolved:
+        location = self._locate_leaf(root, attrs)
+        if not location:
             return {"type": "list"}
-        container, key = resolved
+        container, key = location
         existing = container.get(key)
         if existing and existing.get("type") == "list":
             return existing
@@ -333,21 +331,12 @@ class _SchemaVisitor(NodeVisitor):
         container[key] = node
         return node
 
-    def _resolve(self, root: str, attrs: list[NamePathSegment]) -> tuple[dict[str, SchemaField], str] | None:
-        """
-        Resolve a name path to the container holding its leaf and that leaf's key, creating
-        intermediate objects and lists along the way.
-
-        Returns None when there is no leaf to record: the path ends in a subscript (items[0], which
-        only tells us items is a list), or nests one subscript in another (matrix[0][1], a shape
-        this schema cannot express).
-        """
+    def _locate_leaf(self, root: str, attrs: list[NamePathSegment]) -> tuple[dict[str, SchemaField], str] | None:
         frame = self._lookup_frame(root)
         if not attrs:
             return frame or self.root, root
 
-        # A loop or set target resolves into its scope frame, so writes against it never reach the
-        # schema. Its remaining segments continue from the bound node's own item shape.
+        # A local starts from the node it is bound to, so its segments land on that node.
         container = frame[root].setdefault("properties", {}) if frame else self.root
         key: str | None = None if frame else root
         path = [root]
@@ -369,10 +358,10 @@ class _SchemaVisitor(NodeVisitor):
         return (container, key) if key else None
 
     def _record_container_conflict(self, container: dict[str, SchemaField], key: str, path: str, segment: str) -> None:
-        """Note a field read from a path the template has already established as a single value."""
+        """Note a object field access from a path the template has already established as a single value."""
         existing = container.get(key)
         if any(leaf is existing for leaf in self.guarded):
-            # {% if section %}{{ section.title }}{% endif %} is a common way to guard an optional object, not a clash
+            # {% if section %}{{ section.title }}{% endif %} guards an optional object, not a clash
             return
         if not existing or existing.get("type") not in ("string", "boolean"):
             return
@@ -398,18 +387,18 @@ class _SchemaVisitor(NodeVisitor):
         container[key] = {"type": "list" if as_list else "object", "properties": properties}
         return properties
 
-    def _set_leaf(self, container: dict[str, SchemaField], key: str, use: _LeafUse) -> None:
+    def _set_leaf(self, container: dict[str, SchemaField], key: str, use: LeafUse) -> None:
         existing = container.get(key)
         if not existing:
-            leaf: SchemaField = {"type": "string"} if use is _LeafUse.VALUE else {"type": "boolean"}
+            leaf: SchemaField = {"type": "string"} if use is LeafUse.VALUE else {"type": "boolean"}
             container[key] = leaf
-            if use is _LeafUse.GUARD:
+            if use is LeafUse.GUARD:
                 self.guarded.append(leaf)
             return
-        if use is not _LeafUse.GUARD:
-            # Any other use pins the leaf's shape, so it is no longer refinable.
+        if use is not LeafUse.GUARD:
+            # Any other use pins the shape, so the leaf stops being refinable
             self.guarded = [leaf for leaf in self.guarded if leaf is not existing]
-        if existing.get("type") == "boolean" and use is _LeafUse.VALUE:
+        if existing.get("type") == "boolean" and use is LeafUse.VALUE:
             existing["type"] = "string"
 
     def _lookup_frame(self, name: str) -> dict[str, SchemaField] | None:

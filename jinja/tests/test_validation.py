@@ -221,7 +221,7 @@ def test_numeric_subtraction_is_not_flagged_as_a_hyphenated_variable():
 
 
 def test_numeric_subtraction_leaves_a_real_syntax_error_intact():
-    # Jinja rejects the leading zero in '01' on its own; only the rename suggestion is suppressed.
+    # Jinja rejects the leading zero in '01' on its own. Only the rename suggestion is suppressed.
     text = "{{ 2024-01 }}"
 
     warnings = validate_template_jinja(text)
