@@ -73,15 +73,16 @@ def analyze_template(text: str) -> TemplateAnalysis:
     """Walk a template once to derive both its variable schema and conflict warnings."""
     try:
         ast = parse_template(text)
+
+        visitor = SchemaVisitor()
+        visitor.visit(ast)
+
+        # find_undeclared_variables already decides which names the template requires
+        # the visitor only supplies the structure for those variables
+        required = meta.find_undeclared_variables(ast)
     except TemplateSyntaxError:
         return TemplateAnalysis({}, [])
 
-    visitor = SchemaVisitor()
-    visitor.visit(ast)
-
-    # find_undeclared_variables already decides which names the template requires
-    # the visitor only supplies the structure for those variables
-    required = meta.find_undeclared_variables(ast)
     variables: dict[str, SchemaField] = {name: visitor.root.get(name, {"type": "string"}) for name in sorted(required)}
     _refine_list_formats(variables)
 

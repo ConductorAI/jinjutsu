@@ -48,6 +48,12 @@ def test_merge_tag_name_is_still_usable_as_a_variable():
     assert sorted(variables) == ["hm", "vm"]
 
 
+def test_unknown_filter_does_not_raise():
+    text = "{{ amount | to_json }}"
+
+    assert analyze_template(text) == ({}, [])
+
+
 def test_plain_for_loop_still_extracted():
     text = "{% for row in rows %}{{ row.value }}{% endfor %}"
 
