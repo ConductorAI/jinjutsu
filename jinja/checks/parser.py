@@ -15,16 +15,12 @@ from jinja2 import TemplateSyntaxError
 BLOCK_BALANCE_ERROR = re.compile(r"unexpected end of template|unknown tag 'end\w+'", re.IGNORECASE)
 
 
-def check_jinja_syntax(
-    lines: list[str], error: TemplateSyntaxError | None, *, blocks_already_counted: bool
-) -> list[str]:
+def check_jinja_syntax(lines: list[str], error: TemplateSyntaxError | None) -> list[str]:
     """Replace jinja's own parsing errors in more readable language when we recognise the message"""
     warnings = []
 
     if e := error:
         error_msg = str(e)
-        if blocks_already_counted and BLOCK_BALANCE_ERROR.search(error_msg):
-            return []
         source_line = None
 
         if e.lineno:
@@ -59,6 +55,10 @@ def check_jinja_syntax(
         )
 
     return warnings
+
+
+def should_defer_to_tag_counts(error: TemplateSyntaxError) -> bool:
+    return bool(BLOCK_BALANCE_ERROR.search(str(error)))
 
 
 def _syntax_error(*, title: str, error: str, line: int | None, source_line: str | None) -> str:

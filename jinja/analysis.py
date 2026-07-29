@@ -13,7 +13,7 @@ from .checks.blocks import check_merge_tags_outside_loops, check_mismatched_tags
 from .checks.delimiters import check_malformed_tags, check_misplaced_statement_delimiters
 from .checks.names import check_builtin_method_attributes, check_hyphenated_variables
 from .checks.objects import check_no_objects_printed_directly
-from .checks.parser import check_jinja_syntax
+from .checks.parser import check_jinja_syntax, should_defer_to_tag_counts
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
 from .utils.tag_utils import TemplateText, read_template
 from .variable_tree import VariableNode, VariableTreeVisitor
@@ -43,10 +43,12 @@ def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[str
     # Neither Jinja's own error nor the tag counts mean anything in this case, so hide those errors
     broken_delimiters = check_malformed_tags(text) + check_misplaced_statement_delimiters(text)
     unbalanced_blocks = check_mismatched_tags(text.source)
+    # Jinja fails to parse an unbalanced block too, and the tag counts above already said it in plainer words
+    defers_to_tag_counts = bool(unbalanced_blocks and error and should_defer_to_tag_counts(error))
 
     warnings = list(broken_delimiters or unbalanced_blocks)
-    if not broken_delimiters:
-        warnings.extend(check_jinja_syntax(text.lines, error, blocks_already_counted=bool(unbalanced_blocks)))
+    if not broken_delimiters and not defers_to_tag_counts:
+        warnings.extend(check_jinja_syntax(text.lines, error))
 
     # A template can be perfectly valid and still hit these, so they must never hide a real syntax errors above
     warnings.extend(check_hyphenated_variables(text.tags))
