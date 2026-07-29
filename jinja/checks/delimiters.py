@@ -33,7 +33,7 @@ def check_malformed_tags(lines: list[str]) -> list[str]:
                     )
                 )
         # Check for % } instead of %}
-        elif re.search(r"%\s+\}", line) and not re.search(r"\{\s+%", line):
+        elif re.search(r"%\s+\}", line):
             match = re.search(r"\{%.*?%\s+\}", line)
             if match:
                 malformed_tag = match.group(0)

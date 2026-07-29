@@ -2,14 +2,7 @@
 Warnings:
 - Mismatched loop tags                         {% for %} and {% endfor %} counts differ
 - Mismatched conditional tags                  {% if %} and {% endif %} counts differ
-
-Jinja's own parse errors, rewritten for readability:
-- Use '==' to compare                          {% if a = 1 %}
-- Unexpected '...' after the expression        {% if a b c %}
-- '...' is a curly quote                       {% if a == “x” %}
-- Missing closing tag like '{% endfor %}'      unexpected end of template
-- Invalid variable name in '{{ }}' or '{% %}'  {{ a. }}
-- Check for typos or formatting issues         anything we do not recognise
+- Cell merge is not inside a loop              {% vm %} or {% hm %} with no enclosing {% for %}
 """
 
 import re
