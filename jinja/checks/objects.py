@@ -1,4 +1,6 @@
 """
+We typically don't want to print object directly, since they render as {'header': {'title': 'X'}}
+
 Warnings:
 - '...' is an object and cannot be printed directly   {{ case }} where the template also reads case.title
 - '...' is a list and cannot be printed directly      {{ rows }} where the template also reads row.name
@@ -10,13 +12,12 @@ from ..variable_tree import VariableTreeVisitor
 
 
 def check_no_objects_printed_directly(visitor: VariableTreeVisitor) -> list[str]:
-    """Warn for each {{ a.b }} that turned out to name an object or a list rather than a value."""
     warnings = []
     for lineno, root, attrs in visitor.printed:
         node = lookup_path(visitor.root, root, attrs)
         node_type = node.get("type") if node else None
         path = ".".join([root, *attrs])
-        # Already reported as a clash. Same cause, so one warning is enough.
+        # Already reported as a clash, so one warning is enough
         if node_type not in ("object", "list") or path in visitor.conflict_paths:
             continue
         if node_type == "object":

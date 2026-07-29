@@ -91,7 +91,7 @@ def test_valid_tags_are_not_flagged_as_misplaced_delimiters():
 
 
 def test_broken_delimiter_does_not_also_report_a_tag_mismatch():
-    # The counts cannot see an opener they do not recognize, so they would claim 0 {% if %} tags
+    # The counts can't see an opener they don't recognize, so they would claim 0 {% if %} tags
     for text in ("{ % if x %}y{% endif %}", "{if% if x %}y{% endif %}"):
         warnings = warnings_for(text)
 

@@ -20,10 +20,10 @@ BUILTIN_METHOD = (
 
 def check_hyphenated_variables(full_text: str) -> list[str]:
     """
-    Check for names containing hyphens, which Jinja2 interprets as subtraction.
+    Confirm intent for names containing hyphens, which jinja interprets as subtraction
 
-    Both sides of the hyphen must start a name, so {{ 2024-01 }} is arithmetic on literals and is
-    left alone, as is the spaced {{ a - b }} form and the whitespace control in {%- if x %}.
+    Both sides of the hyphen must start a name, so {{ 2024-01 }} is math and not flagged
+    The spaced {{ a - b }} form is also not flagged as well as the whitespace control in {%- if x %}
     """
     warnings = []
     for line_num, line, tag_text in find_tags(full_text):
@@ -49,13 +49,12 @@ def check_hyphenated_variables(full_text: str) -> list[str]:
 
 def check_builtin_method_attributes(full_text: str) -> list[str]:
     """
-    Check for fields read with dot syntax whose name is also a built-in dict or list method.
+    Check for fields read with dot syntax whose name is also a built-in dict or list method
 
     Jinja resolves x.items to the value's own method before looking for an "items" field, so the
-    document renders the method object. Which names collide depends on whether the value arrives
-    as a dict or a list, so every name either type defines is reported. Bracket syntax is never
-    ambiguous, so following the fix is safe even where the dotted form would have worked. An
-    explicit call like x.items() is deliberate and is left alone.
+    document renders the method object which looks like `<built-in method items of dict object at 0x105993a40>`
+    Bracket syntax is never ambiguous, so following the fix is safe even where the dotted form would have worked
+    Explicit calls like x.items() are deliberate and not flagged
     """
     warnings = []
     for line_num, line, tag_text in find_tags(full_text):
@@ -88,8 +87,8 @@ def check_builtin_method_attributes(full_text: str) -> list[str]:
     return warnings
 
 
+# Rewrite each '.field' match as bracket access, right to left so earlier offsets stay valid
 def _bracket_matches(tag_text: str, matches: list[re.Match[str]]) -> str:
-    """Rewrite each '.field' match as bracket access, right to left so earlier offsets stay valid."""
     for match in reversed(matches):
         tag_text = f"{tag_text[: match.start()]}[{match.group(1)!r}]{tag_text[match.end() :]}"
     return tag_text

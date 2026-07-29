@@ -41,17 +41,12 @@ def check_mismatched_tags(full_text: str) -> list[str]:
     return warnings
 
 
-def _tag_count(*, title: str, found: str, fix: str) -> str:
-    return f"{title}\n  Found: {found}\n  Fix: {fix}"
-
-
 def check_merge_tags_outside_loops(full_text: str) -> list[str]:
     """
-    Check for a docxtpl cell merge, {% vm %} or {% hm %}, used outside a loop.
+    Check for a docxtpl cell merge, {% vm %} or {% hm %}, used outside a loop
 
-    docxtpl expands both into {% if loop.first %}, so without an enclosing {% for %} the document
-    fails to render. normalize_docxtpl_prefixes drops these tags before parsing, so Jinja never
-    sees them and the syntax fallback cannot report this on its own.
+    Since docxtpl expands these into {% if loop.first %}, the document fails to render without a closing {% for %}
+    we drop these tags before parsing, so the jinja validator can't report this on its own
     """
     warnings = []
     depth = 0
@@ -78,3 +73,7 @@ def check_merge_tags_outside_loops(full_text: str) -> list[str]:
                     )
                 )
     return warnings
+
+
+def _tag_count(*, title: str, found: str, fix: str) -> str:
+    return f"{title}\n  Found: {found}\n  Fix: {fix}"

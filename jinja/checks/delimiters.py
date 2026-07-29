@@ -94,13 +94,8 @@ def check_malformed_tags(lines: list[str]) -> list[str]:
     return warnings
 
 
+# Check for statement tags whose opening '%' is missing or out of position, like '{if% x %}'
 def check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
-    """
-    Check for statement tags whose opening '%' is missing or out of position, e.g. '{if% x %}'.
-
-    Jinja cannot report these. Without a leading '{%' it reads the tag as plain text, so the only
-    error it raises is about an end tag further down that now has nothing to close.
-    """
     warnings = []
     for line_num, line in enumerate(lines, start=1):
         for match in re.finditer(r"\{(?![%{#])([^{}]*?)%\}", line):

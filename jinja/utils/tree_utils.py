@@ -2,7 +2,7 @@ from ..variable_tree import VariableNode
 
 
 def refine_list_formats(tree: dict[str, VariableNode]) -> None:
-    """Derive item_format for every list in the tree, now that its item's fields are known."""
+    # Derive item_format for every list in the tree, now that those item's fields are known
     for var_info in tree.values():
         if var_info.get("type") == "list":
             if "properties" in var_info and var_info["properties"]:

@@ -4,13 +4,15 @@ from jinja2 import nodes
 NamePathSegment = str | int
 
 
-def name_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
+def split_ast_object_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
     """
-    Split a dotted path like case.header.title into its first name and the steps after it.
+    Splits a detected object into a root and list of path segments
 
-    Returns None for anything that is not a plain path, such as a function call or arithmetic.
-    A quoted subscript is a field name, so r['items'] reads the same as r.items. A number is a
-    list position and is kept as a number, so items[0] and items.0 both mean the first element.
+    case.header.title  ->  ("case", ["header", "title"])
+    amount             ->  ("amount", [])
+    r['items']         ->  ("r", ["items"])        quoted key is a field, same as r.items
+    items[0].name      ->  ("items", [0, "name"])  number is a list position, kept as int
+    items.0.name       ->  ("items", [0, "name"])  same path, Jinja's other spelling
     """
     segments: list[NamePathSegment] = []
     current = node
@@ -31,15 +33,15 @@ def name_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
     return None
 
 
-def unwrap_filters(node: nodes.Node) -> nodes.Node:
-    "Strip filter applications from an expression, so `items | sort | unique` yields `items`"
+# Strip list operations from an expression, so `variable | sort | unique` yields `variable`
+def strip_list_operations(node: nodes.Node) -> nodes.Node:
     while isinstance(node, nodes.Filter) and node.node:
         node = node.node
     return node
 
 
-def target_names(target: nodes.Node) -> list[str]:
-    "The names a template invents, like the x in {% for x in items %} or {% set x = 1 %}"
+# Find local variables a template invents, like the x in {% for x in items %} or {% set x = 1 %}
+def jinja_local_variables(target: nodes.Node) -> list[str]:
     if isinstance(target, nodes.Name):
         return [target.name]
     if isinstance(target, nodes.Tuple):

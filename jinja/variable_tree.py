@@ -1,9 +1,8 @@
 """
-Model the shape of every variable a template uses, and build it from the Jinja AST.
+Model the shape of every variable a template uses, and build it from the jinja AST
 
-The tree, what `properties` and `item_format` each mean, and how a type is decided are all in
-README.md. The short version: a VariableNode is an object, a list, a string or a boolean, objects
-and lists hold children under `properties`, and a list's `properties` describes one element.
+A VariableNode is an object, a list, a string or a boolean
+Objects and lists hold children under `properties`, and a list's `properties` describes one element
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from typing import Literal, TypedDict
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
 
-from .utils.ast_utils import NamePathSegment, name_path, target_names, unwrap_filters
+from .utils.ast_utils import NamePathSegment, jinja_local_variables, split_ast_object_path, strip_list_operations
 from .utils.string_utils import warning_to_string
 
 
@@ -29,49 +28,34 @@ class VariableNode(VariableNodeBase, total=False):
 
 
 class LeafUse(Enum):
-    # Read for its value, e.g. {{ x }} or {% if x == 'FINAL' %}
-    VALUE = auto()
-    # Tested for truthiness, e.g. {% if x %}
-    GUARD = auto()
-    # Compared against a boolean literal, e.g. {% if x == true %}
-    BOOLEAN = auto()
+    VALUE = auto()  # Read for its value, e.g. {{ x }} or {% if x == 'FINAL' %}
+    GUARD = auto()  # Tested for truthiness, e.g. {% if x %}
+    BOOLEAN = auto()  # Compared against a boolean literal, e.g. {% if x == true %}
 
 
 class VariableTreeVisitor(NodeVisitor):
     """
-    Build the variable tree in `root` by walking the AST once.
+    Build the variable tree in `root` by walking the AST once. For example:
 
-    Terms used here and in the methods below:
+        {% for s in case.sections %}{{ s.name }}{% endfor %}
 
-    node
-        One entry in the variable tree, a VariableNode. An object or a list holds other nodes under
-        `properties`. A string or a boolean is a leaf.
-    path
-        A chain of names read from the template, such as `case.header.title`, split into a root
-        name and its following segments.
-    printed path
-        A path that is the whole of a `{{ }}` expression, so its value lands in the document.
-        `{{ case.title }}` counts. `{{ items | length }}` does not, because that prints a count
-        rather than the list.
-    local
-        A name the template invents rather than one the user supplies: a loop target, a set
-        target, or a macro, call or with block parameter.
-    frame
-        One dict mapping the locals of a single nesting level to the tree node each is bound to.
-    scope
-        The stack of frames. `visit_For` and the parameterized blocks push a frame on entry and
-        pop it on exit, and `_lookup_frame` searches the stack innermost first.
+        root = {"case": {"type": "object", "properties": {
+                    "sections": {"type": "list", "properties": {"name": {"type": "string"}}}}}}
 
-    A frame holds a pointer into the tree rather than a copy, so a loop target binds to the very
-    list node it iterates and `{{ s.name }}` writes `name` into that list's properties. That is how
-    a list comes to describe its item.
+    `s` never lands in `root`, since the template invents it and nobody supplies a value for it
+    While the loop body is walked, `s` is bound to the `case.sections` node itself rather than a copy
+    So `{{ s.name }}` writes `name` into that node's properties, which is how a list describes its item
 
-    A local must never be reported as a variable, since nobody supplies one. `_locate_leaf` looks a
-    leading name up in `scope` first and continues from the node it is bound to, so `s` finds
-    `sections` and is then discarded instead of becoming a key in `root`.
+    `self._scope` holds one dict per nesting level, mapping each invented name to the node it's bound to
+    `visit_For` and the parameterized blocks push a dict on entry and pop it on exit
+    `_lookup_frame` searches innermost first, so the inner `s` below shadows the outer one
 
-    `conflicts` and `printed` are gathered here because only this pass sees how each path is used.
-    Every visit_* method must set `lineno`, or a warning will cite a stale line.
+        {% for s in outer %}{% for s in inner %}{{ s.x }}{% endfor %}{% endfor %}
+
+        root = {"outer": {"type": "list"}, "inner": {"type": "list", "properties": {"x": {"type": "string"}}}}
+
+    `conflicts` and `printed` are gathered here because only this pass sees how each path is used
+    Every visit_* method sets `lineno`, otherwise a warning cites a stale line
     """
 
     def __init__(self) -> None:
@@ -79,10 +63,12 @@ class VariableTreeVisitor(NodeVisitor):
         self._scope: list[dict[str, VariableNode]] = [{}]
         self.conflicts: list[str] = []
         self.conflict_paths: set[str] = set()
+        # {{ case }} only looks wrong once {{ case.title }} somewhere else has made `case` an object
+        # So record (lineno, root, segments) while we can still see the bare print, and let
+        # check_no_objects_printed_directly decide once the tree is finished
+        self.printed: list[tuple[int, str, list[str]]] = []
         # Leaves seen only as a truthiness guard, which says nothing about their shape
         self._guarded: list[VariableNode] = []
-        # Paths printed on their own, as {{ a.b }} rather than inside a larger expression
-        self.printed: list[tuple[int, str, list[str]]] = []
         self._lineno = 0
 
     def visit_Output(self, node: nodes.Output) -> None:  # noqa: N802
@@ -104,13 +90,11 @@ class VariableTreeVisitor(NodeVisitor):
     def visit_For(self, node: nodes.For) -> None:  # noqa: N802
         self._lineno = node.iter.lineno
         frame: dict[str, VariableNode] = {}
-        # {% for x in items | sort %} still iterates items
-        # Filter arguments are picked up by find_undeclared_variables.
-        name = name_path(unwrap_filters(node.iter))
-        if not name:
+        path = split_ast_object_path(strip_list_operations(node.iter))
+        if not path:
             self._record_load(node.iter)
-        list_node: VariableNode = self._ensure_list(*name) if name else {"type": "list"}
-        for target in target_names(node.target):
+        list_node: VariableNode = self._ensure_list(*path) if path else {"type": "list"}
+        for target in jinja_local_variables(node.target):
             frame[target] = list_node
         self._scope.append(frame)
         if node.test:
@@ -123,7 +107,7 @@ class VariableTreeVisitor(NodeVisitor):
 
     def visit_With(self, node: nodes.With) -> None:  # noqa: N802
         self._lineno = node.lineno
-        # Read the values before binding, so {% with a = a %} still records the outer name.
+        # Read the values before binding, so {% with a = a %} still records the outer name
         for value in node.values:
             self._record_load(value)
         self._visit_parameterized_block(node.targets, node.body)
@@ -137,22 +121,22 @@ class VariableTreeVisitor(NodeVisitor):
 
     def visit_Assign(self, node: nodes.Assign) -> None:  # noqa: N802
         self._lineno = node.lineno
-        for target in target_names(node.target):
+        for target in jinja_local_variables(node.target):
             self._scope[-1][target] = {"type": "object", "properties": {}}
         self._record_load(node.node)
 
     def visit_AssignBlock(self, node: nodes.AssignBlock) -> None:  # noqa: N802
         self._lineno = node.lineno
-        for target in target_names(node.target):
+        for target in jinja_local_variables(node.target):
             self._scope[-1][target] = {"type": "object", "properties": {}}
         for child in node.body:
             self.visit(child)
 
     def _visit_parameterized_block(self, targets: Sequence[nodes.Node], body: list[nodes.Node]) -> None:
-        """Walk a macro, call, or with block with its locals bound, so they stay out of the tree."""
+        """Walk a macro, call, or with block with its locals bound, so they stay out of the tree"""
         frame: dict[str, VariableNode] = {}
         for target in targets:
-            for name in target_names(target):
+            for name in jinja_local_variables(target):
                 frame[name] = {"type": "object", "properties": {}}
         self._scope.append(frame)
         for child in body:
@@ -160,10 +144,10 @@ class VariableTreeVisitor(NodeVisitor):
         self._scope.pop()
 
     def _record_printed(self, node: nodes.Node) -> None:
-        name = name_path(node)
-        if not name:
+        path = split_ast_object_path(node)
+        if not path:
             return
-        root, segments = name
+        root, segments = path
         if self._lookup_frame(root) or any(isinstance(segment, int) for segment in segments):
             return
         self.printed.append((self._lineno, root, [segment for segment in segments if isinstance(segment, str)]))
@@ -175,9 +159,9 @@ class VariableTreeVisitor(NodeVisitor):
             if node.expr2:
                 self._record_load(node.expr2)
             return
-        name = name_path(node)
-        if name:
-            self._record_path(*name, use=LeafUse.VALUE)
+        path = split_ast_object_path(node)
+        if path:
+            self._record_path(*path, use=LeafUse.VALUE)
             return
         for child in node.iter_child_nodes():
             self._record_load(child)
@@ -192,9 +176,9 @@ class VariableTreeVisitor(NodeVisitor):
             return
         if self._record_boolean_comparison(node):
             return
-        name = name_path(node)
-        if name:
-            self._record_path(*name, use=LeafUse.GUARD)
+        path = split_ast_object_path(node)
+        if path:
+            self._record_path(*path, use=LeafUse.GUARD)
             return
         self._record_load(node)
 
@@ -206,10 +190,10 @@ class VariableTreeVisitor(NodeVisitor):
             return False
         if not isinstance(operand.expr.value, bool):
             return False
-        name = name_path(node.expr)
-        if not name:
+        path = split_ast_object_path(node.expr)
+        if not path:
             return False
-        self._record_path(*name, use=LeafUse.BOOLEAN)
+        self._record_path(*path, use=LeafUse.BOOLEAN)
         return True
 
     def _record_path(self, root: str, attrs: list[NamePathSegment], use: LeafUse) -> None:
@@ -236,7 +220,7 @@ class VariableTreeVisitor(NodeVisitor):
         if not attrs:
             return frame or self.root, root
 
-        # A local starts from the node it is bound to, so its segments land on that node.
+        # A local starts from the node it's bound to, so its segments land on that node
         container = frame[root].setdefault("properties", {}) if frame else self.root
         key: str | None = None if frame else root
         path = [root]
@@ -257,11 +241,11 @@ class VariableTreeVisitor(NodeVisitor):
                 path.append(segment)
         return (container, key) if key else None
 
+    # Record a warning when a path already used as a plain value is now being read as an object
     def _record_container_conflict(self, container: dict[str, VariableNode], key: str, path: str, segment: str) -> None:
-        """Note that a path already used as a plain value is now being read as an object."""
         existing = container.get(key)
         if any(leaf is existing for leaf in self._guarded):
-            # {% if section %}{{ section.title }}{% endif %} guards an optional object, not a clash
+            # {% if section %}{{ section.title }}{% endif %} guards an optional object and isn't considered a clash
             return
         if not existing or existing.get("type") not in ("string", "boolean"):
             return

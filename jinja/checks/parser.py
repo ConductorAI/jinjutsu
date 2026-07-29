@@ -5,7 +5,7 @@ Jinja's own parse errors, rewritten in plainer words:
 - '...' is a curly quote                       {% if a == “x” %}
 - Missing closing tag like '{% endfor %}'      unexpected end of template
 - Invalid variable name in '{{ }}' or '{% %}'  {{ a. }}
-- Check for typos or formatting issues         anything we do not recognise
+- Check for typos or formatting issues         anything we don't recognise
 """
 
 import re
@@ -15,13 +15,8 @@ from jinja2 import TemplateSyntaxError
 BLOCK_BALANCE_ERROR = re.compile(r"unexpected end of template|unknown tag 'end\w+'", re.IGNORECASE)
 
 
+# Replace jinja's own parsing errors in more readable language when we recognise the message
 def check_jinja_syntax(full_text: str, error: TemplateSyntaxError | None, *, blocks_already_counted: bool) -> list[str]:
-    """
-    Report Jinja's own parse error, in plainer words when we recognise the message.
-
-    blocks_already_counted drops the error when it only repeats an imbalance check_mismatched_tags
-    has already counted. Every other error Jinja raises is reported, even alongside other warnings.
-    """
     warnings = []
 
     if e := error:
@@ -66,7 +61,6 @@ def check_jinja_syntax(full_text: str, error: TemplateSyntaxError | None, *, blo
 
 
 def _syntax_error(*, title: str, error: str, line: int | None, source_line: str | None) -> str:
-    # A blank source_line still means Jinja pointed at a real line, so it keeps the heading
     if line and source_line is not None:
         return f"Line {line}: {title}\n  {source_line}\n  Error: {error}"
     return f"Jinja2 syntax error: {title}\n  Error: {error}"

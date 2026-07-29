@@ -1,7 +1,7 @@
 import re
 
 
-# Replace {# #} spans so commented-out tags are not read as template code
+# Replace {# #} spans so jinja doesn't read commented-out tags as template code
 def replace_comments_with_spaces(full_text: str) -> str:
     return re.sub(r"\{#.*?#\}", lambda m: re.sub(r"[^\n]", " ", m.group()), full_text, flags=re.DOTALL)
 

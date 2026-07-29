@@ -1,8 +1,8 @@
 """
-The one way in: hand it template text, get back what the template needs and what is wrong with it.
+The one way in: hand it template text, get back what the template needs and what is wrong with it
 
-Everything else in this package is an internal step. Parsing happens here, exactly once, and both
-halves are handed the same result: the walk in variable_tree.py, and the checks in checks/.
+Everything else in this package is an internal step
+Parsing happens once here, then variable_tree.py walks the result and checks/ inspects the text
 """
 
 from typing import NamedTuple
@@ -22,13 +22,8 @@ JINJA_ENV = Environment()
 
 
 class TemplateReport(NamedTuple):
-    """
-    variables: the variable tree described in README.md, empty when the template will not parse
-    diagnostics: every problem found, in the order a reader should see them
-    """
-
-    variables: dict[str, VariableNode]
-    diagnostics: list[str]
+    variables: dict[str, VariableNode]  # the variable tree described in README.md, empty when the template won't parse
+    diagnostics: list[str]  # every problem found, in the order a reader should see them
 
 
 def analyze_jinja_template(template_text: str) -> TemplateReport:
@@ -42,12 +37,12 @@ def analyze_jinja_template(template_text: str) -> TemplateReport:
     return TemplateReport(variables, validation_errors + variable_conflict_errors)
 
 
+# Run every check, falling back to jinja's parser for what we don't cover
 def validate(full_text: str, error: TemplateSyntaxError | None) -> list[str]:
-    "Run every text check, falling back to Jinja's parser for what they do not cover"
     lines = full_text.split("\n")
 
-    # A broken delimiter makes Jinja read the tag as plain text, so nothing after it can be
-    # trusted. Neither Jinja's own error nor the tag counts mean anything. See the README.
+    # A broken delimiter makes Jinja read the tag as plain text, so nothing after it can be trusted
+    # Neither Jinja's own error nor the tag counts mean anything in this case, so hide those errors
     broken_delimiters = check_malformed_tags(lines) + check_misplaced_statement_delimiters(lines)
     unbalanced_blocks = check_mismatched_tags(full_text)
 
@@ -55,29 +50,27 @@ def validate(full_text: str, error: TemplateSyntaxError | None) -> list[str]:
     if not broken_delimiters:
         warnings.extend(check_jinja_syntax(full_text, error, blocks_already_counted=bool(unbalanced_blocks)))
 
-    # A template can be perfectly valid and still hit these, so they must never hide a real
-    # syntax error from the fallback above.
+    # A template can be perfectly valid and still hit these, so they must never hide a real syntax errors above
     warnings.extend(check_hyphenated_variables(full_text))
     warnings.extend(check_builtin_method_attributes(full_text))
     warnings.extend(check_merge_tags_outside_loops(full_text))
     return warnings
 
 
+# Build the variable tree using nodes from a previously parsed template, and warn about issues it finds
 def walk(ast: nodes.Template | None) -> tuple[dict[str, VariableNode], list[str]]:
-    """Build the variable tree from an already-parsed template, and warn about what it finds."""
     if not ast:
         return {}, []
 
     visitor = VariableTreeVisitor()
     visitor.visit(ast)
 
-    # Jinja decides which names the template actually asks for. The walk only says what shape
-    # each one has. Anything the walk saw but Jinja did not ask for is dropped.
+    # Jinja decides which names the template actually asks for
+    # The walk only says what shape each one has
+    # Anything the walk sees but jinja didn't ask for is dropped
     try:
         required = meta.find_undeclared_variables(ast)
     except TemplateAssertionError:
-        # Asking Jinja for the names compiles the template, so an unknown filter fails here rather
-        # than at parse time. A template may well use a filter the caller registers later.
         return {}, []
 
     variables: dict[str, VariableNode] = {name: visitor.root.get(name, {"type": "string"}) for name in sorted(required)}
