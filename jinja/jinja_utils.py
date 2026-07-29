@@ -1,5 +1,4 @@
 import re
-from functools import lru_cache
 from typing import NamedTuple
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
@@ -66,15 +65,12 @@ def normalize_docxtpl_prefixes(text: str) -> str:
     return re.sub(_DOCXTPL_CELL_TAG, _pad_cell_tag, text)
 
 
-@lru_cache(maxsize=4)
 def parse_result(text: str) -> ParseResult:
     """
     Normalize docxtpl prefixes and parse the template, reporting failure instead of raising.
 
-    Cached because the variable extraction and the syntax check both need this and would otherwise
-    each pay for a parse. Returning the error rather than raising it is what makes the cache cover
-    a malformed template too, since lru_cache does not store exceptions. Callers only read the
-    AST, so they can share one.
+    Returning the outcome rather than raising it lets analyze() call this once and hand the same
+    result to both the tree walk and the syntax check, which each need a different half of it.
     """
     try:
         return ParseResult(JINJA_ENV.parse(normalize_docxtpl_prefixes(text)), None)

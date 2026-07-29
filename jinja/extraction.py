@@ -1,16 +1,18 @@
 """
 Turn a template into the variable tree described in variable_tree.py, plus the warnings the walk found.
 
-The tree and the walk that builds it live in variable_tree.py. This module drives them: parse once,
-walk, ask Jinja which names the template actually requires, then fill in the item_format that only
-a finished tree can answer, and word the conflicts that only a finished tree can confirm.
+The tree and the walk that builds it live in variable_tree.py. This module drives them: walk the
+AST analysis.py already parsed, ask Jinja which names the template actually requires, then fill in
+the item_format that only a finished tree can answer, and word the conflicts that only a finished
+tree can confirm.
 """
 
 from typing import NamedTuple
 
 from jinja2 import TemplateAssertionError, meta
 
-from .jinja_utils import format_warning, parse_result
+from .diagnostics import Diagnostic, Layout
+from .jinja_utils import ParseResult
 from .variable_tree import VariableNode, VariableTreeVisitor
 
 
@@ -21,12 +23,12 @@ class TemplateAnalysis(NamedTuple):
     """
 
     variables: dict[str, VariableNode]
-    conflicts: list[str]
+    conflicts: list[Diagnostic]
 
 
-def analyze_template(text: str) -> TemplateAnalysis:
-    """Walk a template once to derive both its variable tree and conflict warnings."""
-    ast = parse_result(text).ast
+def analyze_template(parsed: ParseResult) -> TemplateAnalysis:
+    """Walk an already-parsed template to derive both its variable tree and conflict warnings."""
+    ast = parsed.ast
     if not ast:
         return TemplateAnalysis({}, [])
 
@@ -60,8 +62,10 @@ def analyze_template(text: str) -> TemplateAnalysis:
             article, rendered = "a list", "['item', ...]"
             fix = "loop over it with {% for item in " + path + " %}"
         conflicts.append(
-            format_warning(
-                line_no=lineno,
+            Diagnostic(
+                code="printed-whole-container",
+                layout=Layout.DETAIL,
+                line=lineno,
                 title=f"'{path}' is printed as a whole {node_type}",
                 found="{{ " + path + " }}",
                 fix=fix,

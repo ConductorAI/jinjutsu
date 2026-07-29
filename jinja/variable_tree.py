@@ -36,18 +36,16 @@ from typing import Literal, TypedDict
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
 
-from .jinja_utils import NamePathSegment, format_warning, name_path, target_names, unwrap_filters
-
-VariableType = Literal["string", "boolean", "list", "object"]
-ItemFormat = Literal["string", "object"]
+from .diagnostics import Diagnostic, Layout
+from .jinja_utils import NamePathSegment, name_path, target_names, unwrap_filters
 
 
 class _VariableNodeBase(TypedDict):
-    type: VariableType
+    type: Literal["string", "boolean", "list", "object"]
 
 
 class VariableNode(_VariableNodeBase, total=False):
-    item_format: ItemFormat
+    item_format: Literal["string", "object"]
     properties: dict[str, VariableNode]
 
 
@@ -100,7 +98,7 @@ class VariableTreeVisitor(NodeVisitor):
     def __init__(self) -> None:
         self.root: dict[str, VariableNode] = {}
         self.scope: list[dict[str, VariableNode]] = [{}]
-        self.conflicts: list[str] = []
+        self.conflicts: list[Diagnostic] = []
         self.conflict_paths: set[str] = set()
         # Leaves seen only as a truthiness guard, which says nothing about their shape
         self.guarded: list[VariableNode] = []
@@ -290,8 +288,10 @@ class VariableTreeVisitor(NodeVisitor):
             return
         self.conflict_paths.add(path)
         self.conflicts.append(
-            format_warning(
-                line_no=self.lineno,
+            Diagnostic(
+                code="value-and-object",
+                layout=Layout.DETAIL,
+                line=self.lineno,
                 title=f"'{path}' is used as both a value and an object",
                 found=f"{path}.{segment}",
                 fix="give the two uses different names",

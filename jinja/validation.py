@@ -1,7 +1,8 @@
 import re
 from collections.abc import Iterable, Iterator
 
-from .jinja_utils import DOCXTPL_TAG_PREFIX, format_warning, parse_result
+from .diagnostics import Diagnostic, Layout
+from .jinja_utils import DOCXTPL_TAG_PREFIX, ParseResult
 
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
 # How Jinja words an unbalanced block, either too few end tags or one too many
@@ -13,7 +14,7 @@ _BUILTIN_METHOD = (
 )
 
 
-def validate_template_jinja(full_text: str) -> list[str]:
+def validate_template_jinja(full_text: str, parsed: ParseResult) -> list[Diagnostic]:
     """
     Validate Jinja2 syntax in a docx template.
 
@@ -22,15 +23,17 @@ def validate_template_jinja(full_text: str) -> list[str]:
     """
     lines = full_text.split("\n")
 
-    # A broken delimiter is the one thing that changes how the rest of the template lexes: Jinja
-    # reads the tag as plain text, so whatever it reports next is a consequence of this mistake and
-    # names an innocent end tag somewhere below. Nothing it says can be trusted, so it stays quiet.
+    # A broken delimiter is the one thing that changes how the rest of the template lexes, so
+    # nothing downstream of it can be trusted. Jinja reads the tag as plain text and then blames an
+    # innocent end tag somewhere below, and the tag counts miss the opener they cannot recognize and
+    # report an imbalance that is not there. Both are consequences of the one mistake, so the
+    # delimiter warning is left to speak for itself.
     broken_delimiters = _check_malformed_tags(lines) + _check_misplaced_statement_delimiters(lines)
     unbalanced_blocks = _check_mismatched_tags(full_text)
 
-    warnings = broken_delimiters + unbalanced_blocks
+    warnings = list(broken_delimiters or unbalanced_blocks)
     if not broken_delimiters:
-        warnings.extend(_check_jinja_syntax(full_text, blocks_already_counted=bool(unbalanced_blocks)))
+        warnings.extend(_check_jinja_syntax(full_text, parsed, blocks_already_counted=bool(unbalanced_blocks)))
 
     # None of these says anything about whether the template parses, so none may hide a syntax
     # error from the fallback above.
@@ -40,7 +43,7 @@ def validate_template_jinja(full_text: str) -> list[str]:
     return warnings
 
 
-def _check_malformed_tags(lines: list[str]) -> list[str]:
+def _check_malformed_tags(lines: list[str]) -> list[Diagnostic]:
     """Check for malformed Jinja2 tags with extra spaces or missing braces."""
     warnings = []
     for line_num, line in enumerate(lines, start=1):
@@ -50,8 +53,10 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
             if match:
                 malformed_tag = match.group(0)
                 warnings.append(
-                    format_warning(
-                        line_no=line_num,
+                    Diagnostic(
+                        code="malformed-tag",
+                        layout=Layout.DETAIL,
+                        line=line_num,
                         title="Extra space after '{' in tag",
                         found=malformed_tag,
                         fix=malformed_tag.replace("{ ", "{").replace(" }", "}"),
@@ -64,8 +69,10 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
             if match:
                 malformed_tag = match.group(0)
                 warnings.append(
-                    format_warning(
-                        line_no=line_num,
+                    Diagnostic(
+                        code="malformed-tag",
+                        layout=Layout.DETAIL,
+                        line=line_num,
                         title="Extra space before '}' in tag",
                         found=malformed_tag,
                         fix=malformed_tag.replace("{ ", "{").replace(" }", "}"),
@@ -77,8 +84,10 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
         if match := re.search(r"(?<!\{)\{\s+\{(?!\{).*?\}\s*\}", line):
             malformed_tag = match.group(0)
             warnings.append(
-                format_warning(
-                    line_no=line_num,
+                Diagnostic(
+                    code="malformed-tag",
+                    layout=Layout.DETAIL,
+                    line=line_num,
                     title="Extra space after '{' in variable tag",
                     found=malformed_tag,
                     fix=re.sub(r"\}\s+\}", "}}", re.sub(r"\{\s+\{", "{{", malformed_tag)),
@@ -91,8 +100,10 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
         if match := re.search(r"\{\{[^}]*\}(?!\})", line):
             incomplete_tag = match.group(0)
             warnings.append(
-                format_warning(
-                    line_no=line_num,
+                Diagnostic(
+                    code="malformed-tag",
+                    layout=Layout.DETAIL,
+                    line=line_num,
                     title="Missing closing '}}' in variable tag",
                     found=incomplete_tag,
                     fix=incomplete_tag + "}",
@@ -108,8 +119,10 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
         ):
             incomplete_tag = match.group(0)
             warnings.append(
-                format_warning(
-                    line_no=line_num,
+                Diagnostic(
+                    code="malformed-tag",
+                    layout=Layout.DETAIL,
+                    line=line_num,
                     title="Missing closing '%}' in statement tag",
                     found=incomplete_tag,
                     fix=incomplete_tag[:-1] + "%}",
@@ -120,7 +133,7 @@ def _check_malformed_tags(lines: list[str]) -> list[str]:
     return warnings
 
 
-def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
+def _check_misplaced_statement_delimiters(lines: list[str]) -> list[Diagnostic]:
     """
     Check for statement tags whose opening '%' is missing or out of position, e.g. '{if% x %}'.
 
@@ -137,8 +150,10 @@ def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
                 # '{ % if x %}' is the extra-space case, already reported by _check_malformed_tags
                 continue
             warnings.append(
-                format_warning(
-                    line_no=line_num,
+                Diagnostic(
+                    code="misplaced-delimiter",
+                    layout=Layout.DETAIL,
+                    line=line_num,
                     title="Misplaced '%' in statement tag",
                     found=match.group(0),
                     fix="{% " + content.replace("%", "").strip() + " %}",
@@ -152,7 +167,7 @@ def _check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
     return warnings
 
 
-def _check_hyphenated_variables(full_text: str) -> list[str]:
+def _check_hyphenated_variables(full_text: str) -> list[Diagnostic]:
     """
     Check for names containing hyphens, which Jinja2 interprets as subtraction.
 
@@ -164,8 +179,10 @@ def _check_hyphenated_variables(full_text: str) -> list[str]:
         for match in _HYPHENATED_NAME.finditer(_blank_string_literals(tag_text)):
             name = match.group()
             warnings.append(
-                format_warning(
-                    line_no=line_num,
+                Diagnostic(
+                    code="hyphenated-name",
+                    layout=Layout.DETAIL,
+                    line=line_num,
                     title="Variable name contains hyphen(s)",
                     found=name,
                     fix=name.replace("-", "_"),
@@ -181,7 +198,7 @@ def _check_hyphenated_variables(full_text: str) -> list[str]:
     return warnings
 
 
-def _check_mismatched_tags(full_text: str) -> list[str]:
+def _check_mismatched_tags(full_text: str) -> list[Diagnostic]:
     """Check for mismatched loop and conditional tags."""
     warnings = []
     full_text = _blank_comments(full_text)
@@ -190,24 +207,32 @@ def _check_mismatched_tags(full_text: str) -> list[str]:
     endfor_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endfor\s*-?%\}}", full_text))
     if for_count != endfor_count:
         warnings.append(
-            f"Mismatched loop tags\n"
-            f"  Found: {for_count} {{% for %}} tag(s) but {endfor_count} {{% endfor %}} tag(s)\n"
-            f"  Fix: Each {{% for %}} must have a corresponding {{% endfor %}}"
+            Diagnostic(
+                code="tag-count-mismatch",
+                layout=Layout.TAG_COUNT,
+                title="Mismatched loop tags",
+                found=f"{for_count} {{% for %}} tag(s) but {endfor_count} {{% endfor %}} tag(s)",
+                fix="Each {% for %} must have a corresponding {% endfor %}",
+            )
         )
 
     if_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*if\s+", full_text))
     endif_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endif\s*-?%\}}", full_text))
     if if_count != endif_count:
         warnings.append(
-            f"Mismatched conditional tags\n"
-            f"  Found: {if_count} {{% if %}} tag(s) but {endif_count} {{% endif %}} tag(s)\n"
-            f"  Fix: Each {{% if %}} must have a corresponding {{% endif %}}"
+            Diagnostic(
+                code="tag-count-mismatch",
+                layout=Layout.TAG_COUNT,
+                title="Mismatched conditional tags",
+                found=f"{if_count} {{% if %}} tag(s) but {endif_count} {{% endif %}} tag(s)",
+                fix="Each {% if %} must have a corresponding {% endif %}",
+            )
         )
 
     return warnings
 
 
-def _check_builtin_method_attributes(full_text: str) -> list[str]:
+def _check_builtin_method_attributes(full_text: str) -> list[Diagnostic]:
     """
     Check for fields read with dot syntax whose name is also a built-in dict or list method.
 
@@ -236,8 +261,10 @@ def _check_builtin_method_attributes(full_text: str) -> list[str]:
                 f"own methods, so the document renders the methods instead of your values."
             )
         warnings.append(
-            format_warning(
-                line_no=line_num,
+            Diagnostic(
+                code="builtin-method-collision",
+                layout=Layout.DETAIL,
+                line=line_num,
                 title=headline,
                 found=tag_text,
                 fix=_bracket_matches(tag_text, matches),
@@ -248,7 +275,7 @@ def _check_builtin_method_attributes(full_text: str) -> list[str]:
     return warnings
 
 
-def _check_merge_tags_outside_loops(full_text: str) -> list[str]:
+def _check_merge_tags_outside_loops(full_text: str) -> list[Diagnostic]:
     """
     Check for a docxtpl cell merge, {% vm %} or {% hm %}, used outside a loop.
 
@@ -267,8 +294,10 @@ def _check_merge_tags_outside_loops(full_text: str) -> list[str]:
                 depth = max(depth - 1, 0)
             elif not depth:
                 warnings.append(
-                    format_warning(
-                        line_no=line_num,
+                    Diagnostic(
+                        code="merge-tag-outside-loop",
+                        layout=Layout.DETAIL,
+                        line=line_num,
                         title="Cell merge is not inside a loop",
                         found="{% " + keyword + " %}",
                         fix="move it into the {% for %} whose rows it should merge across, or delete it",
@@ -283,7 +312,7 @@ def _check_merge_tags_outside_loops(full_text: str) -> list[str]:
     return warnings
 
 
-def _check_jinja_syntax(full_text: str, *, blocks_already_counted: bool) -> list[str]:
+def _check_jinja_syntax(full_text: str, parsed: ParseResult, *, blocks_already_counted: bool) -> list[Diagnostic]:
     """
     Check Jinja2 syntax by attempting to parse the template.
 
@@ -294,16 +323,16 @@ def _check_jinja_syntax(full_text: str, *, blocks_already_counted: bool) -> list
     """
     warnings = []
 
-    if e := parse_result(full_text).error:
+    if e := parsed.error:
         error_msg = str(e)
         if blocks_already_counted and _BLOCK_BALANCE_ERROR.search(error_msg):
             return []
-        line_preview = ""
+        source_line = None
 
         if e.lineno:
             lines = full_text.split("\n")
             if 0 < e.lineno <= len(lines):
-                line_preview = f"  {lines[e.lineno - 1]}"
+                source_line = lines[e.lineno - 1]
 
         if leftover := re.search(r"expected token 'end of statement block', got '(.+?)'", error_msg):
             token = leftover.group(1)
@@ -323,11 +352,16 @@ def _check_jinja_syntax(full_text: str, *, blocks_already_counted: bool) -> list
         else:
             guidance = "Check for typos or formatting issues"
 
-        if e.lineno and line_preview:
-            warning = f"Line {e.lineno}: {guidance}\n{line_preview}\n  Error: {error_msg}"
-        else:
-            warning = f"Jinja2 syntax error: {guidance}\n  Error: {error_msg}"
-        warnings.append(warning)
+        warnings.append(
+            Diagnostic(
+                code="jinja-syntax",
+                layout=Layout.SYNTAX,
+                title=guidance,
+                line=e.lineno,
+                error=error_msg,
+                source_line=source_line,
+            )
+        )
 
     return warnings
 
