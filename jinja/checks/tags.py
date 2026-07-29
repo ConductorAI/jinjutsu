@@ -8,11 +8,12 @@ Warnings:
 import re
 from collections.abc import Iterable, Iterator
 
-from ..jinja_utils import DOCXTPL_TAG_PREFIX, blank_comments, blank_string_literals, warning_to_string
+from ..utils.docxtpl_utils import DOCXTPL_TAG_PREFIX
+from ..utils.string_utils import replace_comments_with_spaces, warning_to_string
 
-_HYPHENATED_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*(?:\.\w+)*(?:-[A-Za-z_]\w*)+")
+HYPHENATED_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*(?:\.\w+)*(?:-[A-Za-z_]\w*)+")
 
-_BUILTIN_METHOD = (
+BUILTIN_METHOD = (
     r"(?:append|clear|copy|count|extend|fromkeys|get|index|insert|items|keys|pop|popitem|remove"
     r"|reverse|setdefault|sort|update|values)"
 )
@@ -27,7 +28,7 @@ def check_hyphenated_variables(full_text: str) -> list[str]:
     """
     warnings = []
     for line_num, line, tag_text in _iter_tags(full_text):
-        for match in _HYPHENATED_NAME.finditer(blank_string_literals(tag_text)):
+        for match in HYPHENATED_NAME.finditer(_replace_string_literals_with_spaces(tag_text)):
             name = match.group()
             warnings.append(
                 warning_to_string(
@@ -59,7 +60,7 @@ def check_builtin_method_attributes(full_text: str) -> list[str]:
     """
     warnings = []
     for line_num, line, tag_text in _iter_tags(full_text):
-        matches = list(re.finditer(rf"\.({_BUILTIN_METHOD})\b(?!\s*\()", blank_string_literals(tag_text)))
+        matches = list(re.finditer(rf"\.({BUILTIN_METHOD})\b(?!\s*\()", _replace_string_literals_with_spaces(tag_text)))
         if not matches:
             continue
         fields = list(dict.fromkeys(match.group(1) for match in matches))
@@ -136,7 +137,7 @@ def _iter_tags(full_text: str) -> Iterator[tuple[int, str, str]]:
     swallowing the prose between it and whatever '}}' comes next.
     """
     lines = full_text.split("\n")
-    for match in re.finditer(r"\{[%{](?:(?!\{[%{]).)*?[%}]\}", blank_comments(full_text), re.DOTALL):
+    for match in re.finditer(r"\{[%{](?:(?!\{[%{]).)*?[%}]\}", replace_comments_with_spaces(full_text), re.DOTALL):
         line_no = full_text.count("\n", 0, match.start()) + 1
         yield line_no, lines[line_no - 1], re.sub(r"\s*\n\s*", " ", match.group())
 
@@ -153,3 +154,7 @@ def _join_quoted(names: Iterable[str]) -> str:
     if len(quoted) == 2:
         return " and ".join(quoted)
     return ", ".join(quoted[:-1]) + f", and {quoted[-1]}"
+
+
+def _replace_string_literals_with_spaces(tag_text: str) -> str:
+    return re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", lambda m: " " * len(m.group()), tag_text)

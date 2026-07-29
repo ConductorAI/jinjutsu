@@ -15,14 +15,15 @@ from typing import Literal, TypedDict
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
 
-from .jinja_utils import NamePathSegment, name_path, target_names, unwrap_filters, warning_to_string
+from .utils.ast_utils import NamePathSegment, name_path, target_names, unwrap_filters
+from .utils.string_utils import warning_to_string
 
 
-class _VariableNodeBase(TypedDict):
+class VariableNodeBase(TypedDict):
     type: Literal["string", "boolean", "list", "object"]
 
 
-class VariableNode(_VariableNodeBase, total=False):
+class VariableNode(VariableNodeBase, total=False):
     item_format: Literal["string", "object"]
     properties: dict[str, VariableNode]
 
@@ -75,23 +76,23 @@ class VariableTreeVisitor(NodeVisitor):
 
     def __init__(self) -> None:
         self.root: dict[str, VariableNode] = {}
-        self.scope: list[dict[str, VariableNode]] = [{}]
+        self._scope: list[dict[str, VariableNode]] = [{}]
         self.conflicts: list[str] = []
         self.conflict_paths: set[str] = set()
         # Leaves seen only as a truthiness guard, which says nothing about their shape
-        self.guarded: list[VariableNode] = []
+        self._guarded: list[VariableNode] = []
         # Paths printed on their own, as {{ a.b }} rather than inside a larger expression
         self.printed: list[tuple[int, str, list[str]]] = []
-        self.lineno = 0
+        self._lineno = 0
 
     def visit_Output(self, node: nodes.Output) -> None:  # noqa: N802
         for child in node.nodes:
-            self.lineno = child.lineno
+            self._lineno = child.lineno
             self._record_printed(child)
             self._record_load(child)
 
     def visit_If(self, node: nodes.If) -> None:  # noqa: N802
-        self.lineno = node.test.lineno
+        self._lineno = node.test.lineno
         self._record_test(node.test)
         for child in node.body:
             self.visit(child)
@@ -101,7 +102,7 @@ class VariableTreeVisitor(NodeVisitor):
             self.visit(child)
 
     def visit_For(self, node: nodes.For) -> None:  # noqa: N802
-        self.lineno = node.iter.lineno
+        self._lineno = node.iter.lineno
         frame: dict[str, VariableNode] = {}
         # {% for x in items | sort %} still iterates items
         # Filter arguments are picked up by find_undeclared_variables.
@@ -111,17 +112,17 @@ class VariableTreeVisitor(NodeVisitor):
         list_node: VariableNode = self._ensure_list(*name) if name else {"type": "list"}
         for target in target_names(node.target):
             frame[target] = list_node
-        self.scope.append(frame)
+        self._scope.append(frame)
         if node.test:
             self._record_test(node.test)
         for child in node.body:
             self.visit(child)
         for child in node.else_:
             self.visit(child)
-        self.scope.pop()
+        self._scope.pop()
 
     def visit_With(self, node: nodes.With) -> None:  # noqa: N802
-        self.lineno = node.lineno
+        self._lineno = node.lineno
         # Read the values before binding, so {% with a = a %} still records the outer name.
         for value in node.values:
             self._record_load(value)
@@ -135,15 +136,15 @@ class VariableTreeVisitor(NodeVisitor):
         self._visit_parameterized_block(node.args, node.body)
 
     def visit_Assign(self, node: nodes.Assign) -> None:  # noqa: N802
-        self.lineno = node.lineno
+        self._lineno = node.lineno
         for target in target_names(node.target):
-            self.scope[-1][target] = {"type": "object", "properties": {}}
+            self._scope[-1][target] = {"type": "object", "properties": {}}
         self._record_load(node.node)
 
     def visit_AssignBlock(self, node: nodes.AssignBlock) -> None:  # noqa: N802
-        self.lineno = node.lineno
+        self._lineno = node.lineno
         for target in target_names(node.target):
-            self.scope[-1][target] = {"type": "object", "properties": {}}
+            self._scope[-1][target] = {"type": "object", "properties": {}}
         for child in node.body:
             self.visit(child)
 
@@ -153,10 +154,10 @@ class VariableTreeVisitor(NodeVisitor):
         for target in targets:
             for name in target_names(target):
                 frame[name] = {"type": "object", "properties": {}}
-        self.scope.append(frame)
+        self._scope.append(frame)
         for child in body:
             self.visit(child)
-        self.scope.pop()
+        self._scope.pop()
 
     def _record_printed(self, node: nodes.Node) -> None:
         name = name_path(node)
@@ -165,7 +166,7 @@ class VariableTreeVisitor(NodeVisitor):
         root, segments = name
         if self._lookup_frame(root) or any(isinstance(segment, int) for segment in segments):
             return
-        self.printed.append((self.lineno, root, [segment for segment in segments if isinstance(segment, str)]))
+        self.printed.append((self._lineno, root, [segment for segment in segments if isinstance(segment, str)]))
 
     def _record_load(self, node: nodes.Node) -> None:
         if isinstance(node, nodes.CondExpr):
@@ -259,7 +260,7 @@ class VariableTreeVisitor(NodeVisitor):
     def _record_container_conflict(self, container: dict[str, VariableNode], key: str, path: str, segment: str) -> None:
         """Note that a path already used as a plain value is now being read as an object."""
         existing = container.get(key)
-        if any(leaf is existing for leaf in self.guarded):
+        if any(leaf is existing for leaf in self._guarded):
             # {% if section %}{{ section.title }}{% endif %} guards an optional object, not a clash
             return
         if not existing or existing.get("type") not in ("string", "boolean"):
@@ -267,7 +268,7 @@ class VariableTreeVisitor(NodeVisitor):
         self.conflict_paths.add(path)
         self.conflicts.append(
             warning_to_string(
-                line_no=self.lineno,
+                line_no=self._lineno,
                 title=f"'{path}' is used as both a value and an object",
                 found=f"{path}.{segment}",
                 fix="give the two uses different names",
@@ -292,16 +293,30 @@ class VariableTreeVisitor(NodeVisitor):
             leaf: VariableNode = {"type": "string"} if use is LeafUse.VALUE else {"type": "boolean"}
             container[key] = leaf
             if use is LeafUse.GUARD:
-                self.guarded.append(leaf)
+                self._guarded.append(leaf)
             return
         if use is not LeafUse.GUARD:
             # Any other use settles the type, so it can no longer change
-            self.guarded = [leaf for leaf in self.guarded if leaf is not existing]
+            self._guarded = [leaf for leaf in self._guarded if leaf is not existing]
         if existing.get("type") == "boolean" and use is LeafUse.VALUE:
             existing["type"] = "string"
 
     def _lookup_frame(self, name: str) -> dict[str, VariableNode] | None:
-        for frame in reversed(self.scope):
+        for frame in reversed(self._scope):
             if name in frame:
                 return frame
         return None
+
+
+def refine_list_formats(tree: dict[str, VariableNode]) -> None:
+    """Derive item_format for every list in the tree, now that its item's fields are known."""
+    for var_info in tree.values():
+        if var_info.get("type") == "list":
+            if "properties" in var_info and var_info["properties"]:
+                var_info["item_format"] = "object"
+                refine_list_formats(var_info["properties"])
+            else:
+                var_info["item_format"] = "string"
+                var_info.pop("properties", None)
+        elif var_info.get("type") == "object":
+            refine_list_formats(var_info.get("properties", {}))

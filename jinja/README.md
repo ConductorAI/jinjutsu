@@ -168,15 +168,19 @@ diagnostic in the rest of the template.
 
 | file | |
 |---|---|
-| `analysis.py` | `analyze_jinja_template()` and `TemplateReport` — the entry point, the walk that builds the tree, and the suppression rule |
+| `analysis.py` | `analyze_jinja_template()` and `TemplateReport` — the entry point, the walk that builds the tree, and which warnings survive |
 | `variable_tree.py` | `VariableNode` and `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
 | `checks/delimiters.py` | tags whose delimiters are broken, so Jinja never sees them as tags |
 | `checks/tags.py` | what is written inside a well-formed tag |
 | `checks/syntax.py` | block balance and Jinja's own parser |
-| `jinja_utils.py` | parsing, docxtpl normalization, text blanking, AST path helpers, `warning_to_string` |
+| `checks/objects.py` | objects and lists printed whole, which only the finished tree reveals |
+| `utils/ast_utils.py` | reading a Jinja AST node |
+| `utils/docxtpl_utils.py` | parsing, and rewriting docxtpl's tag syntax |
+| `utils/string_utils.py` | wording a warning, and blanking out comments |
 | `tests/` | one test per edge case, so a failure names the case that broke |
 
-`checks/` is split by **what each module reads** — raw lines, tag contents, or the parser. That is
-also why `delimiters.py` works a line at a time and the others do not.
+`checks/` is split by **what each module reads** — raw lines, tag contents, the parser, or the
+finished variable tree. That is also why `delimiters.py` works a line at a time and the others do
+not.
 
 [docxtpl]: https://docxtpl.readthedocs.io

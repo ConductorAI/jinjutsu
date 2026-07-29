@@ -14,14 +14,17 @@ Jinja's own parse errors, rewritten for readability:
 
 import re
 
-from ..jinja_utils import DOCXTPL_TAG_PREFIX, ParseResult, blank_comments
+from jinja2 import TemplateSyntaxError
 
-_BLOCK_BALANCE_ERROR = re.compile(r"unexpected end of template|unknown tag 'end\w+'", re.IGNORECASE)
+from ..utils.docxtpl_utils import DOCXTPL_TAG_PREFIX
+from ..utils.string_utils import replace_comments_with_spaces
+
+BLOCK_BALANCE_ERROR = re.compile(r"unexpected end of template|unknown tag 'end\w+'", re.IGNORECASE)
 
 
 def check_mismatched_tags(full_text: str) -> list[str]:
     warnings = []
-    full_text = blank_comments(full_text)
+    full_text = replace_comments_with_spaces(full_text)
 
     for_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*for\s+", full_text))
     endfor_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endfor\s*-?%\}}", full_text))
@@ -48,7 +51,7 @@ def check_mismatched_tags(full_text: str) -> list[str]:
     return warnings
 
 
-def check_jinja_syntax(full_text: str, parsed: ParseResult, *, blocks_already_counted: bool) -> list[str]:
+def check_jinja_syntax(full_text: str, error: TemplateSyntaxError | None, *, blocks_already_counted: bool) -> list[str]:
     """
     Report Jinja's own parse error, in plainer words when we recognise the message.
 
@@ -57,9 +60,9 @@ def check_jinja_syntax(full_text: str, parsed: ParseResult, *, blocks_already_co
     """
     warnings = []
 
-    if e := parsed.error:
+    if e := error:
         error_msg = str(e)
-        if blocks_already_counted and _BLOCK_BALANCE_ERROR.search(error_msg):
+        if blocks_already_counted and BLOCK_BALANCE_ERROR.search(error_msg):
             return []
         source_line = None
 

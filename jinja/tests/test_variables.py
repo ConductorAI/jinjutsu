@@ -1,6 +1,8 @@
+from jinja2 import Environment, TemplateSyntaxError
+
 from conduit.server.features.doj.templates.jinja import analyze_jinja_template
-from conduit.server.features.doj.templates.jinja.analysis import _walk
-from conduit.server.features.doj.templates.jinja.jinja_utils import parse_result
+from conduit.server.features.doj.templates.jinja.analysis import walk
+from conduit.server.features.doj.templates.jinja.utils.docxtpl_utils import normalize_docxtpl_prefixes
 
 
 def test_extracts_docxtpl_tr_loop_variable():
@@ -401,7 +403,7 @@ def test_whole_object_printed_is_reported():
     conflicts = _conflicts(text)
 
     assert len(conflicts) == 1
-    assert "'a' is printed as a whole object" in conflicts[0]
+    assert "'a' is an object and cannot be printed directly" in conflicts[0]
 
 
 def test_whole_list_printed_is_reported():
@@ -410,7 +412,7 @@ def test_whole_list_printed_is_reported():
     conflicts = _conflicts(text)
 
     assert len(conflicts) == 1
-    assert "'items' is printed as a whole list" in conflicts[0]
+    assert "'items' is a list and cannot be printed directly" in conflicts[0]
 
 
 def test_truthiness_guard_before_field_access_is_not_a_conflict():
@@ -499,4 +501,8 @@ def _variables(text: str):
 
 def _conflicts(text: str) -> list[str]:
     "Just what the walk noticed, without the text checks analyze_jinja_template() merges in alongside"
-    return _walk(parse_result(text))[1]
+    try:
+        ast = Environment().parse(normalize_docxtpl_prefixes(text))
+    except TemplateSyntaxError:
+        ast = None
+    return walk(ast)[1]

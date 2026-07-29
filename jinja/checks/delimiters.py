@@ -10,7 +10,7 @@ Warnings:
 
 import re
 
-from ..jinja_utils import warning_to_string
+from ..utils.string_utils import warning_to_string
 
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
 
