@@ -210,6 +210,33 @@ def test_unclosed_loop_is_reported_as_a_loop_mismatch():
     assert any("1 {% for %} tag(s) but 0 {% endfor %} tag(s)" in w for w in warnings)
 
 
+def test_tag_mismatch_does_not_hide_an_unrelated_syntax_error():
+    text = "{% for row in rows %}{{ row.name }}\n{% if a b c %}x{% endif %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("{% endfor %} tag(s)" in w for w in warnings)
+    assert any("Unexpected 'b' after the expression" in w for w in warnings)
+
+
+def test_tag_mismatch_absorbs_the_syntax_error_that_only_restates_it():
+    for text in ("{% for row in rows %}{{ row.name }}", "{% if x %}yes", "{% endif %}", "{% endfor %}"):
+        warnings = validate_template_jinja(text)
+
+        assert not any("Missing closing tag" in w for w in warnings), text
+        assert not any("Check for typos" in w for w in warnings), text
+
+
+def test_broken_delimiter_suppresses_the_end_tag_it_orphans():
+    # '{ % if x %}' lexes as text, so Jinja blames the {% endif %} four lines below for being alone
+    text = "{ % if x %}\nf\nf\nf\n{% endif %}"
+
+    warnings = validate_template_jinja(text)
+
+    assert any("Extra space after '{' in tag" in w for w in warnings)
+    assert not any("Line 5" in w for w in warnings)
+
+
 def test_invalid_name_after_a_dot_reports_the_variable_name_guidance():
     text = "{{ a. }}"
 

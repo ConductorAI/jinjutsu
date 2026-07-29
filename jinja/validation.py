@@ -4,6 +4,8 @@ from collections.abc import Iterable, Iterator
 from .jinja_utils import DOCXTPL_TAG_PREFIX, format_warning, parse_result
 
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
+# How Jinja words an unbalanced block, either too few end tags or one too many
+_BLOCK_BALANCE_ERROR = re.compile(r"unexpected end of template|unknown tag 'end\w+'", re.IGNORECASE)
 _HYPHENATED_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*(?:\.\w+)*(?:-[A-Za-z_]\w*)+")
 _BUILTIN_METHOD = (
     r"(?:append|clear|copy|count|extend|fromkeys|get|index|insert|items|keys|pop|popitem|remove"
@@ -20,17 +22,18 @@ def validate_template_jinja(full_text: str) -> list[str]:
     """
     lines = full_text.split("\n")
 
-    warnings = []
-    warnings.extend(_check_malformed_tags(lines))
-    warnings.extend(_check_misplaced_statement_delimiters(lines))
-    warnings.extend(_check_mismatched_tags(full_text))
+    # A broken delimiter is the one thing that changes how the rest of the template lexes: Jinja
+    # reads the tag as plain text, so whatever it reports next is a consequence of this mistake and
+    # names an innocent end tag somewhere below. Nothing it says can be trusted, so it stays quiet.
+    broken_delimiters = _check_malformed_tags(lines) + _check_misplaced_statement_delimiters(lines)
+    unbalanced_blocks = _check_mismatched_tags(full_text)
 
-    if not warnings:
-        # Fall back to Jinja's own parser only when the checks above found nothing
-        warnings.extend(_check_jinja_syntax(full_text))
+    warnings = broken_delimiters + unbalanced_blocks
+    if not broken_delimiters:
+        warnings.extend(_check_jinja_syntax(full_text, blocks_already_counted=bool(unbalanced_blocks)))
 
-    # These run below the gate. A template can be valid and still hit them, and none of them says
-    # anything about whether it parses, so none may hide a syntax error from the fallback.
+    # None of these says anything about whether the template parses, so none may hide a syntax
+    # error from the fallback above.
     warnings.extend(_check_hyphenated_variables(full_text))
     warnings.extend(_check_builtin_method_attributes(full_text))
     warnings.extend(_check_merge_tags_outside_loops(full_text))
@@ -280,12 +283,21 @@ def _check_merge_tags_outside_loops(full_text: str) -> list[str]:
     return warnings
 
 
-def _check_jinja_syntax(full_text: str) -> list[str]:
-    """Check Jinja2 syntax by attempting to parse the template."""
+def _check_jinja_syntax(full_text: str, *, blocks_already_counted: bool) -> list[str]:
+    """
+    Check Jinja2 syntax by attempting to parse the template.
+
+    blocks_already_counted drops the error when it only restates an imbalance that
+    _check_mismatched_tags has already put a count to. Both answer the same question, and the count
+    reads better, so this is the one overlap worth staying quiet about. Every other error Jinja
+    raises is a problem no other check looks for and is reported even alongside other warnings.
+    """
     warnings = []
 
     if e := parse_result(full_text).error:
         error_msg = str(e)
+        if blocks_already_counted and _BLOCK_BALANCE_ERROR.search(error_msg):
+            return []
         line_preview = ""
 
         if e.lineno:
