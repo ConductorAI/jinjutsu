@@ -1,5 +1,5 @@
-from conduit.server.features.doj.templates.extraction import analyze_template
-from conduit.server.features.doj.templates.jinja_utils import parse_result
+from conduit.server.features.doj.templates.jinja.extraction import analyze_template
+from conduit.server.features.doj.templates.jinja.jinja_utils import parse_result
 
 
 def test_extracts_docxtpl_tr_loop_variable():

@@ -22,29 +22,6 @@ class ParseResult(NamedTuple):
     error: TemplateSyntaxError | None
 
 
-def format_warning(
-    *,
-    line_no: int,
-    title: str,
-    found: str,
-    fix: str,
-    reason: str | None = None,
-    source_line: str | None = None,
-) -> str:
-    """
-    Render one template warning in the shared Line / Found / Fix / Reason layout.
-
-    Every field is plain data, so callers write Jinja snippets literally instead of escaping
-    braces past an f-string.
-    """
-    parts = [f"Line {line_no}: {title}", f"  Found: {found}", f"  Fix:   {fix}"]
-    if reason:
-        parts.append(f"  Reason: {reason}")
-    if source_line:
-        parts.append(f"  {source_line}")
-    return "\n".join(parts)
-
-
 def normalize_docxtpl_prefixes(text: str) -> str:
     """
     Rewrite docxtpl's own tag syntax as vanilla Jinja so the parser accepts it.
