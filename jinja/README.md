@@ -1,4 +1,4 @@
-# Jinja template analysis
+# Jinja Template Analysis
 
 Read a Jinja template and answer two questions in one pass:
 
@@ -43,7 +43,7 @@ In fairness to [jinjaninja], it bills itself as a style enforcement tool, so cor
 not what it set out to catch — it is in the table because it is the closest thing to a Jinja linter
 on PyPI, and it is the only one of the three that checks style at all.
 
-<details>
+<details open>
 <summary><b>Full case-by-case comparison</b> (36 cases)</summary>
 
 **Legend** — ✅ detected, with a message naming the mistake · ⚠️ detected, but only a raw parser
@@ -251,7 +251,7 @@ matters. Two rows are worth reading closely:
   everything following a tag. This package matches tags across newlines instead of per line, so all
   three one-long-line variants land within 20 ms of each other.
 
-<details>
+<details open>
 <summary><b>Where the superlinear costs are</b></summary>
 
 **An axis is one thing you can make bigger about a template.** Every cost below is a product of two
