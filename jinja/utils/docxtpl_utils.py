@@ -1,9 +1,5 @@
 import re
 
-from jinja2 import Environment
-
-JINJA_ENV = Environment()
-
 # docxtpl adds row/cell/paragraph/run prefixes to Jinja tags, e.g. {%tr for ... %} or {{r ... }}
 DOCXTPL_TAG_PREFIX = r"(?:tr|tc|p|r)"
 
