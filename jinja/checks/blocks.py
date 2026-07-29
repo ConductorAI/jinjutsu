@@ -7,17 +7,16 @@ Warnings:
 
 import re
 
-from ..utils.docxtpl_utils import DOCXTPL_TAG_PREFIX
 from ..utils.string_utils import replace_comments_with_spaces, warning_to_string
-from ..utils.tag_utils import find_tags
+from ..utils.tag_utils import find_tags, statement_opening
 
 
 def check_mismatched_tags(full_text: str) -> list[str]:
     warnings = []
     full_text = replace_comments_with_spaces(full_text)
 
-    for_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*for\s+", full_text))
-    endfor_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endfor\s*-?%\}}", full_text))
+    for_count = len(re.findall(statement_opening("for"), full_text))
+    endfor_count = len(re.findall(statement_opening("endfor"), full_text))
     if for_count != endfor_count:
         warnings.append(
             _tag_count(
@@ -27,8 +26,8 @@ def check_mismatched_tags(full_text: str) -> list[str]:
             )
         )
 
-    if_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*if\s+", full_text))
-    endif_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endif\s*-?%\}}", full_text))
+    if_count = len(re.findall(statement_opening("if"), full_text))
+    endif_count = len(re.findall(statement_opening("endif"), full_text))
     if if_count != endif_count:
         warnings.append(
             _tag_count(
@@ -51,7 +50,7 @@ def check_merge_tags_outside_loops(full_text: str) -> list[str]:
     warnings = []
     depth = 0
     for line_num, line, tag_text in find_tags(full_text):
-        if match := re.match(rf"\{{%-?\s*{DOCXTPL_TAG_PREFIX}?\s*(for|endfor|vm|hm)\b", tag_text):
+        if match := re.match(statement_opening("for|endfor|vm|hm"), tag_text):
             keyword = match.group(1)
             if keyword == "for":
                 depth += 1

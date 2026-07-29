@@ -222,6 +222,7 @@ class VariableTreeVisitor(NodeVisitor):
 
         # A local starts from the node it's bound to, so its segments land on that node
         container = frame[root].setdefault("properties", {}) if frame else self.root
+        # key is the name still waiting to be placed, or None when container already points at it
         key: str | None = None if frame else root
         path = [root]
 
