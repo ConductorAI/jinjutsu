@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.jinja import analyze
+from conduit.server.features.doj.templates.jinja import analyze_jinja_template
 
 
 def test_warning_titles_render_jinja_delimiters_literally():
@@ -456,4 +456,4 @@ def test_whitespace_control_tags_are_counted_in_mismatch_check():
 
 
 def _warnings(text: str) -> list[str]:
-    return [diagnostic.render() for diagnostic in analyze(text).diagnostics]
+    return analyze_jinja_template(text).diagnostics

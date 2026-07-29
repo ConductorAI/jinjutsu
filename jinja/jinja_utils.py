@@ -39,7 +39,7 @@ def parse_result(text: str) -> ParseResult:
     """
     Normalize docxtpl prefixes and parse the template, reporting failure instead of raising.
 
-    Returning the outcome lets analyze() call this once and hand the same result to the tree walk
+    Returning the outcome lets analyze_jinja_template() call this once and hand the same result to the tree walk
     and the syntax check, which each need a different half of it.
     """
     try:
@@ -50,10 +50,11 @@ def parse_result(text: str) -> ParseResult:
 
 def name_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]] | None:
     """
-    Reduce a Name / Getattr / constant Getitem chain to (root_name, path_segments), else None.
+    Split a dotted path like case.header.title into its first name and the steps after it.
 
-    A string subscript is a property name, so r['items'] resolves the same as r.items
-    An integer subscript is a list index, kept as the int itself
+    Returns None for anything that is not a plain path, such as a function call or arithmetic.
+    A quoted subscript is a field name, so r['items'] reads the same as r.items. A number is a
+    list position and is kept as a number, so items[0] and items.0 both mean the first element.
     """
     segments: list[NamePathSegment] = []
     current = node
@@ -82,12 +83,29 @@ def unwrap_filters(node: nodes.Node) -> nodes.Node:
 
 
 def target_names(target: nodes.Node) -> list[str]:
-    "Handles tuple unpacking and set assignments"
+    "The names a template invents, like the x in {% for x in items %} or {% set x = 1 %}"
     if isinstance(target, nodes.Name):
         return [target.name]
     if isinstance(target, nodes.Tuple):
         return [item.name for item in target.items if isinstance(item, nodes.Name)]
     return []
+
+
+def warning_to_string(
+    *,
+    line_no: int,
+    title: str,
+    found: str,
+    fix: str,
+    reason: str | None = None,
+    source_line: str | None = None,
+) -> str:
+    parts = [f"Line {line_no}: {title}", f"  Found: {found}", f"  Fix:   {fix}"]
+    if reason:
+        parts.append(f"  Reason: {reason}")
+    if source_line:
+        parts.append(f"  {source_line}")
+    return "\n".join(parts)
 
 
 def blank_comments(full_text: str) -> str:
@@ -101,7 +119,7 @@ def blank_comments(full_text: str) -> str:
 
 
 def blank_string_literals(tag_text: str) -> str:
-    "Replace the contents of quoted literals so validation regex doesn't run on them"
+    "Blank out anything inside quotes, so a check does not flag words in a quoted string"
     return re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", lambda m: " " * len(m.group()), tag_text)
 
 

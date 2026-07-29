@@ -1,19 +1,16 @@
 """
-Jinja template analysis: what data a template needs, and what is wrong with it. See README.md.
+Jinja template analysis which returns what data a template needs, and what is wrong with it:
 
-    report = analyze(template_text)
-    report.variables    # name -> VariableNode, the shape of each variable
-    report.diagnostics  # Diagnostic, one per problem found
+    report = analyze_jinja_template(template_text)
+    report.variables    # dict[str, VariableNode] -> variable names and their shapes
+    report.diagnostics  # list[str] -> list of warnings
 """
 
-from .analysis import TemplateReport, analyze
-from .diagnostics import Diagnostic, Layout
+from .analysis import TemplateReport, analyze_jinja_template
 from .variable_tree import VariableNode
 
 __all__ = [
-    "Diagnostic",
-    "Layout",
     "TemplateReport",
     "VariableNode",
-    "analyze",
+    "analyze_jinja_template",
 ]

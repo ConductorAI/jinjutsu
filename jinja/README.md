@@ -14,18 +14,15 @@ syntax and the mistakes Word introduces on its own (curly quotes, stray spaces i
 ## Usage
 
 ```python
-from conduit.server.features.doj.templates.jinja import analyze
+from conduit.server.features.doj.templates.jinja import analyze_jinja_template
 
-report = analyze(template_text)
+report = analyze_jinja_template(template_text)
 
 report.variables    # {"case": {"type": "object", "properties": {...}}, ...}
-report.diagnostics  # [Diagnostic(...), ...]
-
-for diagnostic in report.diagnostics:
-    print(diagnostic.render())
+report.diagnostics  # ["Line 2: ...", ...] — worded, ready to display
 ```
 
-`analyze` parses once and hands the result to both halves. It never raises for a malformed
+`analyze_jinja_template` parses once and hands the result to both halves. It never raises for a malformed
 template — a parse failure comes back as a diagnostic.
 
 ```
@@ -85,45 +82,42 @@ Two parts of the shape are easy to misread:
 Names the template invents are never reported, since nobody supplies them: loop targets, `{% set %}`
 targets, and macro, call and with block parameters.
 
-## Diagnostics
+## Warnings
 
-`Diagnostic` is data, not a sentence. `render()` produces the display text.
+`report.diagnostics` is a list of finished strings, ready to display. Three layouts, each built by
+one helper:
 
-| field | |
-|---|---|
-| `code` | which check produced it, for grouping or suppression |
-| `line` | `None` when the problem belongs to the whole template |
-| `title` | the headline |
-| `found` | the offending text |
-| `fix` | the edit that clears it |
-| `reason` | why it matters, when that isn't obvious |
-| `source_line` | the template line, for context |
-| `error` | Jinja's own message, on `jinja-syntax` only |
-
-Codes: `malformed-tag`, `misplaced-delimiter`, `tag-count-mismatch`, `hyphenated-name`,
-`builtin-method-collision`, `merge-tag-outside-loop`, `value-and-object`,
-`printed-whole-container`, `jinja-syntax`.
-
-`Layout` picks one of three renderings. The three earned their differences before `Diagnostic`
-existed and are kept verbatim, because diagnostics are stored per template row and never
-recomputed — a wording change would show old and new styles side by side in the same panel. **Change
-the wording only alongside a backfill.**
+`warning_to_string` in `jinja_utils.py` — most warnings, wherever there is a line to point at:
 
 ```
-DETAIL      Line 4: 'a' is used as both a value and an object
-              Found: a.b
-              Fix:   give the two uses different names        <- three spaces, aligned
-              Reason: ...                                    <- optional
-              {{ a.b }}                                      <- optional source line
-
-TAG_COUNT   Mismatched loop tags                             <- no line, nothing to point at
-              Found: 1 {% for %} tag(s) but 0 {% endfor %} tag(s)
-              Fix: Each {% for %} must have a corresponding {% endfor %}   <- one space
-
-SYNTAX      Line 2: Unexpected 'b' after the expression
-              {% if a b c %}
-              Error: expected token 'end of statement block', got 'b'
+Line 4: 'a' is used as both a value and an object
+  Found: a.b
+  Fix:   give the two uses different names        <- three spaces, aligned
+  Reason: ...                                    <- optional
+  {{ a.b }}                                      <- optional source line
 ```
+
+`_tag_count` in `checks/syntax.py` — a count that is wrong across the whole template, so there is no
+one line to blame:
+
+```
+Mismatched loop tags
+  Found: 1 {% for %} tag(s) but 0 {% endfor %} tag(s)
+  Fix: Each {% for %} must have a corresponding {% endfor %}   <- one space
+```
+
+`_syntax_error` in `checks/syntax.py` — Jinja's own message, wrapped in friendlier guidance and kept
+underneath:
+
+```
+Line 2: Unexpected 'b' after the expression
+  {% if a b c %}
+  Error: expected token 'end of statement block', got 'b'
+```
+
+The layouts are kept verbatim because warnings are stored per template row and never recomputed — a
+wording change would show old and new styles side by side in the same panel. **Change the wording
+only alongside a backfill.**
 
 ## Why custom checks instead of Jinja's parser
 
@@ -178,14 +172,13 @@ diagnostic in the rest of the template.
 
 | file | |
 |---|---|
-| `analysis.py` | `analyze()` and `TemplateReport` — the entry point, and the walk that builds the tree |
+| `analysis.py` | `analyze_jinja_template()` and `TemplateReport` — the entry point, and the walk that builds the tree |
 | `variable_tree.py` | `VariableNode` and `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
 | `validation.py` | runs the checks and decides which answers survive — the suppression rule |
 | `checks/delimiters.py` | tags whose delimiters are broken, so Jinja never sees them as tags |
 | `checks/tags.py` | what is written inside a well-formed tag |
 | `checks/syntax.py` | block balance and Jinja's own parser |
-| `diagnostics.py` | `Diagnostic` and `Layout` |
-| `jinja_utils.py` | parsing, docxtpl normalization, text blanking, AST path helpers |
+| `jinja_utils.py` | parsing, docxtpl normalization, text blanking, AST path helpers, `warning_to_string` |
 
 `checks/` is split by **what each module reads** — raw lines, tag contents, or the parser. That is
 also why `delimiters.py` works a line at a time and the others do not.

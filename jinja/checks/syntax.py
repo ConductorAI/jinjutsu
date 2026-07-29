@@ -1,20 +1,25 @@
 """
-Whether the template is syntactically sound: are the blocks balanced, and does Jinja accept it.
+Warnings:
+- Mismatched loop tags                         {% for %} and {% endfor %} counts differ
+- Mismatched conditional tags                  {% if %} and {% endif %} counts differ
 
-The two belong together because they answer the same question and have to agree about it.
-See README.md for when one silences the other.
+Jinja's own parse errors, rewritten for readability:
+- Use '==' to compare                          {% if a = 1 %}
+- Unexpected '...' after the expression        {% if a b c %}
+- '...' is a curly quote                       {% if a == “x” %}
+- Missing closing tag like '{% endfor %}'      unexpected end of template
+- Invalid variable name in '{{ }}' or '{% %}'  {{ a. }}
+- Check for typos or formatting issues         anything we do not recognise
 """
 
 import re
 
-from ..diagnostics import Diagnostic, Layout
 from ..jinja_utils import DOCXTPL_TAG_PREFIX, ParseResult, blank_comments
 
 _BLOCK_BALANCE_ERROR = re.compile(r"unexpected end of template|unknown tag 'end\w+'", re.IGNORECASE)
 
 
-def check_mismatched_tags(full_text: str) -> list[Diagnostic]:
-    """Check for mismatched loop and conditional tags."""
+def check_mismatched_tags(full_text: str) -> list[str]:
     warnings = []
     full_text = blank_comments(full_text)
 
@@ -22,9 +27,7 @@ def check_mismatched_tags(full_text: str) -> list[Diagnostic]:
     endfor_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endfor\s*-?%\}}", full_text))
     if for_count != endfor_count:
         warnings.append(
-            Diagnostic(
-                code="tag-count-mismatch",
-                layout=Layout.TAG_COUNT,
+            _tag_count(
                 title="Mismatched loop tags",
                 found=f"{for_count} {{% for %}} tag(s) but {endfor_count} {{% endfor %}} tag(s)",
                 fix="Each {% for %} must have a corresponding {% endfor %}",
@@ -35,9 +38,7 @@ def check_mismatched_tags(full_text: str) -> list[Diagnostic]:
     endif_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endif\s*-?%\}}", full_text))
     if if_count != endif_count:
         warnings.append(
-            Diagnostic(
-                code="tag-count-mismatch",
-                layout=Layout.TAG_COUNT,
+            _tag_count(
                 title="Mismatched conditional tags",
                 found=f"{if_count} {{% if %}} tag(s) but {endif_count} {{% endif %}} tag(s)",
                 fix="Each {% if %} must have a corresponding {% endif %}",
@@ -47,12 +48,12 @@ def check_mismatched_tags(full_text: str) -> list[Diagnostic]:
     return warnings
 
 
-def check_jinja_syntax(full_text: str, parsed: ParseResult, *, blocks_already_counted: bool) -> list[Diagnostic]:
+def check_jinja_syntax(full_text: str, parsed: ParseResult, *, blocks_already_counted: bool) -> list[str]:
     """
-    Report Jinja's own parse error, in friendlier words where the message is recognizable.
+    Report Jinja's own parse error, in plainer words when we recognise the message.
 
-    blocks_already_counted drops the error when it only restates an imbalance check_mismatched_tags
-    has already counted. Every other error Jinja raises is reported even alongside other warnings.
+    blocks_already_counted drops the error when it only repeats an imbalance check_mismatched_tags
+    has already counted. Every other error Jinja raises is reported, even alongside other warnings.
     """
     warnings = []
 
@@ -86,9 +87,7 @@ def check_jinja_syntax(full_text: str, parsed: ParseResult, *, blocks_already_co
             guidance = "Check for typos or formatting issues"
 
         warnings.append(
-            Diagnostic(
-                code="jinja-syntax",
-                layout=Layout.SYNTAX,
+            _syntax_error(
                 title=guidance,
                 line=e.lineno,
                 error=error_msg,
@@ -97,3 +96,14 @@ def check_jinja_syntax(full_text: str, parsed: ParseResult, *, blocks_already_co
         )
 
     return warnings
+
+
+def _tag_count(*, title: str, found: str, fix: str) -> str:
+    return f"{title}\n  Found: {found}\n  Fix: {fix}"
+
+
+def _syntax_error(*, title: str, error: str, line: int | None, source_line: str | None) -> str:
+    # A blank source_line still means Jinja pointed at a real line, so it keeps the heading
+    if line and source_line is not None:
+        return f"Line {line}: {title}\n  {source_line}\n  Error: {error}"
+    return f"Jinja2 syntax error: {title}\n  Error: {error}"

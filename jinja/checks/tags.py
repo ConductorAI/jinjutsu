@@ -1,12 +1,14 @@
 """
-What is written inside a well-formed tag: names that will not resolve the way the author expects.
+Warnings:
+- Variable name contains hyphen(s)             {{ total-discount }}
+- Field '...' collides with a built-in method  {{ store.items }}
+- Cell merge is not inside a loop              {% vm %} with no enclosing {% for %}
 """
 
 import re
 from collections.abc import Iterable, Iterator
 
-from ..diagnostics import Diagnostic, Layout
-from ..jinja_utils import DOCXTPL_TAG_PREFIX, blank_comments, blank_string_literals
+from ..jinja_utils import DOCXTPL_TAG_PREFIX, blank_comments, blank_string_literals, warning_to_string
 
 _HYPHENATED_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*(?:\.\w+)*(?:-[A-Za-z_]\w*)+")
 
@@ -16,7 +18,7 @@ _BUILTIN_METHOD = (
 )
 
 
-def check_hyphenated_variables(full_text: str) -> list[Diagnostic]:
+def check_hyphenated_variables(full_text: str) -> list[str]:
     """
     Check for names containing hyphens, which Jinja2 interprets as subtraction.
 
@@ -24,14 +26,12 @@ def check_hyphenated_variables(full_text: str) -> list[Diagnostic]:
     left alone, as is the spaced {{ a - b }} form and the whitespace control in {%- if x %}.
     """
     warnings = []
-    for line_num, line, tag_text in iter_tags(full_text):
+    for line_num, line, tag_text in _iter_tags(full_text):
         for match in _HYPHENATED_NAME.finditer(blank_string_literals(tag_text)):
             name = match.group()
             warnings.append(
-                Diagnostic(
-                    code="hyphenated-name",
-                    layout=Layout.DETAIL,
-                    line=line_num,
+                warning_to_string(
+                    line_no=line_num,
                     title="Variable name contains hyphen(s)",
                     found=name,
                     fix=name.replace("-", "_"),
@@ -47,7 +47,7 @@ def check_hyphenated_variables(full_text: str) -> list[Diagnostic]:
     return warnings
 
 
-def check_builtin_method_attributes(full_text: str) -> list[Diagnostic]:
+def check_builtin_method_attributes(full_text: str) -> list[str]:
     """
     Check for fields read with dot syntax whose name is also a built-in dict or list method.
 
@@ -58,7 +58,7 @@ def check_builtin_method_attributes(full_text: str) -> list[Diagnostic]:
     explicit call like x.items() is deliberate and is left alone.
     """
     warnings = []
-    for line_num, line, tag_text in iter_tags(full_text):
+    for line_num, line, tag_text in _iter_tags(full_text):
         matches = list(re.finditer(rf"\.({_BUILTIN_METHOD})\b(?!\s*\()", blank_string_literals(tag_text)))
         if not matches:
             continue
@@ -76,10 +76,8 @@ def check_builtin_method_attributes(full_text: str) -> list[Diagnostic]:
                 f"own methods, so the document renders the methods instead of your values."
             )
         warnings.append(
-            Diagnostic(
-                code="builtin-method-collision",
-                layout=Layout.DETAIL,
-                line=line_num,
+            warning_to_string(
+                line_no=line_num,
                 title=headline,
                 found=tag_text,
                 fix=_bracket_matches(tag_text, matches),
@@ -90,7 +88,7 @@ def check_builtin_method_attributes(full_text: str) -> list[Diagnostic]:
     return warnings
 
 
-def check_merge_tags_outside_loops(full_text: str) -> list[Diagnostic]:
+def check_merge_tags_outside_loops(full_text: str) -> list[str]:
     """
     Check for a docxtpl cell merge, {% vm %} or {% hm %}, used outside a loop.
 
@@ -100,7 +98,7 @@ def check_merge_tags_outside_loops(full_text: str) -> list[Diagnostic]:
     """
     warnings = []
     depth = 0
-    for line_num, line, tag_text in iter_tags(full_text):
+    for line_num, line, tag_text in _iter_tags(full_text):
         if match := re.match(rf"\{{%-?\s*{DOCXTPL_TAG_PREFIX}?\s*(for|endfor|vm|hm)\b", tag_text):
             keyword = match.group(1)
             if keyword == "for":
@@ -109,10 +107,8 @@ def check_merge_tags_outside_loops(full_text: str) -> list[Diagnostic]:
                 depth = max(depth - 1, 0)
             elif not depth:
                 warnings.append(
-                    Diagnostic(
-                        code="merge-tag-outside-loop",
-                        layout=Layout.DETAIL,
-                        line=line_num,
+                    warning_to_string(
+                        line_no=line_num,
                         title="Cell merge is not inside a loop",
                         found="{% " + keyword + " %}",
                         fix="move it into the {% for %} whose rows it should merge across, or delete it",
@@ -127,7 +123,7 @@ def check_merge_tags_outside_loops(full_text: str) -> list[Diagnostic]:
     return warnings
 
 
-def iter_tags(full_text: str) -> Iterator[tuple[int, str, str]]:
+def _iter_tags(full_text: str) -> Iterator[tuple[int, str, str]]:
     """
     Yield (line number, source line, tag text) for every Jinja tag, in document order.
 

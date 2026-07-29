@@ -15,8 +15,7 @@ from typing import Literal, TypedDict
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
 
-from .diagnostics import Diagnostic, Layout
-from .jinja_utils import NamePathSegment, name_path, target_names, unwrap_filters
+from .jinja_utils import NamePathSegment, name_path, target_names, unwrap_filters, warning_to_string
 
 
 class _VariableNodeBase(TypedDict):
@@ -77,7 +76,7 @@ class VariableTreeVisitor(NodeVisitor):
     def __init__(self) -> None:
         self.root: dict[str, VariableNode] = {}
         self.scope: list[dict[str, VariableNode]] = [{}]
-        self.conflicts: list[Diagnostic] = []
+        self.conflicts: list[str] = []
         self.conflict_paths: set[str] = set()
         # Leaves seen only as a truthiness guard, which says nothing about their shape
         self.guarded: list[VariableNode] = []
@@ -258,7 +257,7 @@ class VariableTreeVisitor(NodeVisitor):
         return (container, key) if key else None
 
     def _record_container_conflict(self, container: dict[str, VariableNode], key: str, path: str, segment: str) -> None:
-        """Note a object field access from a path the template has already established as a single value."""
+        """Note that a path already used as a plain value is now being read as an object."""
         existing = container.get(key)
         if any(leaf is existing for leaf in self.guarded):
             # {% if section %}{{ section.title }}{% endif %} guards an optional object, not a clash
@@ -267,10 +266,8 @@ class VariableTreeVisitor(NodeVisitor):
             return
         self.conflict_paths.add(path)
         self.conflicts.append(
-            Diagnostic(
-                code="value-and-object",
-                layout=Layout.DETAIL,
-                line=self.lineno,
+            warning_to_string(
+                line_no=self.lineno,
                 title=f"'{path}' is used as both a value and an object",
                 found=f"{path}.{segment}",
                 fix="give the two uses different names",
@@ -298,7 +295,7 @@ class VariableTreeVisitor(NodeVisitor):
                 self.guarded.append(leaf)
             return
         if use is not LeafUse.GUARD:
-            # Any other use pins the shape, so the leaf stops being refinable
+            # Any other use settles the type, so it can no longer change
             self.guarded = [leaf for leaf in self.guarded if leaf is not existing]
         if existing.get("type") == "boolean" and use is LeafUse.VALUE:
             existing["type"] = "string"

@@ -1,21 +1,21 @@
 """
-Tags whose delimiters are broken, so Jinja never sees them as tags at all.
-
-These work a line at a time rather than through iter_tags, because that helper matches a
-well-formed pair of delimiters and these are the tags missing theirs. README.md notes the
-coverage gap that follows: a broken tag split across a newline is not reported.
+Warnings:
+- Extra space after '{' in tag                 { % if x %}
+- Extra space before '}' in tag                {% if x % }
+- Extra space after '{' in variable tag        { { amount }}
+- Missing closing '}}' in variable tag         {{ amount }
+- Missing closing '%}' in statement tag        {% if x }
+- Misplaced '%' in statement tag               {if% if x %}
 """
 
 import re
 
-from ..diagnostics import Diagnostic, Layout
+from ..jinja_utils import warning_to_string
 
 _JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
-# How Jinja words an unbalanced block, either too few end tags or one too many
 
 
-def check_malformed_tags(lines: list[str]) -> list[Diagnostic]:
-    """Check for malformed Jinja2 tags with extra spaces or missing braces."""
+def check_malformed_tags(lines: list[str]) -> list[str]:
     warnings = []
     for line_num, line in enumerate(lines, start=1):
         # Check for { % instead of {%
@@ -24,10 +24,8 @@ def check_malformed_tags(lines: list[str]) -> list[Diagnostic]:
             if match:
                 malformed_tag = match.group(0)
                 warnings.append(
-                    Diagnostic(
-                        code="malformed-tag",
-                        layout=Layout.DETAIL,
-                        line=line_num,
+                    warning_to_string(
+                        line_no=line_num,
                         title="Extra space after '{' in tag",
                         found=malformed_tag,
                         fix=malformed_tag.replace("{ ", "{").replace(" }", "}"),
@@ -40,10 +38,8 @@ def check_malformed_tags(lines: list[str]) -> list[Diagnostic]:
             if match:
                 malformed_tag = match.group(0)
                 warnings.append(
-                    Diagnostic(
-                        code="malformed-tag",
-                        layout=Layout.DETAIL,
-                        line=line_num,
+                    warning_to_string(
+                        line_no=line_num,
                         title="Extra space before '}' in tag",
                         found=malformed_tag,
                         fix=malformed_tag.replace("{ ", "{").replace(" }", "}"),
@@ -55,10 +51,8 @@ def check_malformed_tags(lines: list[str]) -> list[Diagnostic]:
         if match := re.search(r"(?<!\{)\{\s+\{(?!\{).*?\}\s*\}", line):
             malformed_tag = match.group(0)
             warnings.append(
-                Diagnostic(
-                    code="malformed-tag",
-                    layout=Layout.DETAIL,
-                    line=line_num,
+                warning_to_string(
+                    line_no=line_num,
                     title="Extra space after '{' in variable tag",
                     found=malformed_tag,
                     fix=re.sub(r"\}\s+\}", "}}", re.sub(r"\{\s+\{", "{{", malformed_tag)),
@@ -71,10 +65,8 @@ def check_malformed_tags(lines: list[str]) -> list[Diagnostic]:
         if match := re.search(r"\{\{[^}]*\}(?!\})", line):
             incomplete_tag = match.group(0)
             warnings.append(
-                Diagnostic(
-                    code="malformed-tag",
-                    layout=Layout.DETAIL,
-                    line=line_num,
+                warning_to_string(
+                    line_no=line_num,
                     title="Missing closing '}}' in variable tag",
                     found=incomplete_tag,
                     fix=incomplete_tag + "}",
@@ -90,10 +82,8 @@ def check_malformed_tags(lines: list[str]) -> list[Diagnostic]:
         ):
             incomplete_tag = match.group(0)
             warnings.append(
-                Diagnostic(
-                    code="malformed-tag",
-                    layout=Layout.DETAIL,
-                    line=line_num,
+                warning_to_string(
+                    line_no=line_num,
                     title="Missing closing '%}' in statement tag",
                     found=incomplete_tag,
                     fix=incomplete_tag[:-1] + "%}",
@@ -104,12 +94,12 @@ def check_malformed_tags(lines: list[str]) -> list[Diagnostic]:
     return warnings
 
 
-def check_misplaced_statement_delimiters(lines: list[str]) -> list[Diagnostic]:
+def check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
     """
     Check for statement tags whose opening '%' is missing or out of position, e.g. '{if% x %}'.
 
-    Jinja cannot report these: without a leading '{%' the tag lexes as literal text, so the only
-    error it raises is an unmatched end tag further down the template.
+    Jinja cannot report these. Without a leading '{%' it reads the tag as plain text, so the only
+    error it raises is about an end tag further down that now has nothing to close.
     """
     warnings = []
     for line_num, line in enumerate(lines, start=1):
@@ -121,10 +111,8 @@ def check_misplaced_statement_delimiters(lines: list[str]) -> list[Diagnostic]:
                 # '{ % if x %}' is the extra-space case, already reported by check_malformed_tags
                 continue
             warnings.append(
-                Diagnostic(
-                    code="misplaced-delimiter",
-                    layout=Layout.DETAIL,
-                    line=line_num,
+                warning_to_string(
+                    line_no=line_num,
                     title="Misplaced '%' in statement tag",
                     found=match.group(0),
                     fix="{% " + content.replace("%", "").strip() + " %}",
