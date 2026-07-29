@@ -15,7 +15,6 @@ from .checks.names import check_builtin_method_attributes, check_hyphenated_vari
 from .checks.objects import check_no_objects_printed_directly
 from .checks.parser import check_jinja_syntax
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
-from .utils.tree_utils import refine_list_formats
 from .variable_tree import VariableNode, VariableTreeVisitor
 
 JINJA_ENV = Environment()
@@ -32,12 +31,12 @@ def analyze_jinja_template(template_text: str) -> TemplateReport:
         jinja_ast = JINJA_ENV.parse(normalize_docxtpl_prefixes(template_text))
     except TemplateSyntaxError as e:
         syntax_error = e
-    validation_errors = validate(template_text, syntax_error)
-    variables, variable_conflict_errors = walk(jinja_ast)
+    validation_errors = _validate(template_text, syntax_error)
+    variables, variable_conflict_errors = _build_variable_tree(jinja_ast)
     return TemplateReport(variables, validation_errors + variable_conflict_errors)
 
 
-def validate(full_text: str, error: TemplateSyntaxError | None) -> list[str]:
+def _validate(full_text: str, error: TemplateSyntaxError | None) -> list[str]:
     """Run every check, falling back to jinja's parser for what we don't cover"""
     lines = full_text.split("\n")
 
@@ -57,7 +56,7 @@ def validate(full_text: str, error: TemplateSyntaxError | None) -> list[str]:
     return warnings
 
 
-def walk(ast: nodes.Template | None) -> tuple[dict[str, VariableNode], list[str]]:
+def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, VariableNode], list[str]]:
     """Build the variable tree using nodes from a previously parsed template, and warn about issues it finds"""
     if not ast:
         return {}, []
@@ -74,5 +73,19 @@ def walk(ast: nodes.Template | None) -> tuple[dict[str, VariableNode], list[str]
         return {}, []
 
     variables: dict[str, VariableNode] = {name: visitor.root.get(name, {"type": "string"}) for name in sorted(required)}
-    refine_list_formats(variables)
+    _refine_list_formats(variables)
     return variables, list(dict.fromkeys(visitor.conflicts + check_no_objects_printed_directly(visitor)))
+
+
+def _refine_list_formats(tree: dict[str, VariableNode]) -> None:
+    # Derive item_format for every list in the tree, now that those item's fields are known
+    for var_info in tree.values():
+        if var_info.get("type") == "list":
+            if "properties" in var_info and var_info["properties"]:
+                var_info["item_format"] = "object"
+                _refine_list_formats(var_info["properties"])
+            else:
+                var_info["item_format"] = "string"
+                var_info.pop("properties", None)
+        elif var_info.get("type") == "object":
+            _refine_list_formats(var_info.get("properties", {}))
