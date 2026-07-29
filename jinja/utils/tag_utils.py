@@ -11,7 +11,17 @@ STATEMENT_KEYWORD = r"if|elif|else|endif|for|endfor|set|endset"
 
 
 def statement_opening(keywords: str) -> str:
-    """Regex matching the opening of a statement tag, allowing whitespace control and docxtpl prefixes"""
+    """Regex for a block-opening tag such as {% for %} or {%tr if %}, which is followed by an expression"""
+    return rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*({keywords})\s+"
+
+
+def statement_closing(keywords: str) -> str:
+    """Regex for a complete end tag such as {% endfor %} or {%- endif -%}, which takes no expression"""
+    return rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*({keywords})\s*-?%\}}"
+
+
+def statement_keyword(keywords: str) -> str:
+    """Regex reading the keyword off a tag find_tags already extracted, so the tag shape is known good"""
     return rf"\{{%-?\s*{DOCXTPL_TAG_PREFIX}?\s*({keywords})\b"
 
 
