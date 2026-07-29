@@ -62,7 +62,7 @@ Two parts of the shape are easy to misread:
   `s` to the `sections` node, so `{{ s.name }}` writes `name` into that node's properties.
 - **`item_format` says what one element of a list looks like.** It is filled in after the walk,
   derived from whether the list ended up with properties, so it carries nothing the tree does not
-  already say. It exists for the agent prompt.
+  already say. It is there for callers that want the answer without walking the tree themselves.
 
 ### How types are decided
 
@@ -115,10 +115,6 @@ Line 2: Unexpected 'b' after the expression
   Error: expected token 'end of statement block', got 'b'
 ```
 
-The layouts are kept verbatim because warnings are stored per template row and never recomputed — a
-wording change would show old and new styles side by side in the same panel. **Change the wording
-only alongside a backfill.**
-
 ## Why custom checks instead of Jinja's parser
 
 Jinja's messages are written for programmers. `Encountered unknown tag 'endif'` on line 40 is a
@@ -128,7 +124,7 @@ checks run first and Jinja's parser is the fallback for anything they miss.
 Suppression follows one rule: **a check silences Jinja's error only when both are looking at the
 same mistake.**
 
-- A **broken delimiter** silences it entirely. Jinja lexes the tag as plain text, so every error
+- A **broken delimiter** silences it entirely. Jinja reads the tag as plain text, so every error
   after that is a consequence — it will blame an innocent end tag pages below. For the same reason
   the tag counts are suppressed too: they cannot see an opener they do not recognize, so they would
   claim zero `{% if %}` tags when one is sitting right there, just broken.
