@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum, auto
-from typing import Literal, TypedDict
+from typing import Literal, NamedTuple, TypedDict
 
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
@@ -25,6 +25,26 @@ class VariableNodeBase(TypedDict):
 class VariableNode(VariableNodeBase, total=False):
     item_format: Literal["string", "object"]
     properties: dict[str, VariableNode]
+
+
+class PrintedPath(NamedTuple):
+    """
+    A variable printed with {{ }}, split into its root name and the fields read off it
+
+    {{ case.header.title }} on line 4  ->  PrintedPath(4, "case", ["header", "title"])
+    {{ amount }} on line 1             ->  PrintedPath(1, "amount", [])
+    """
+
+    line_no: int
+    root: str
+    attrs: list[str]
+
+
+class WalkResult(NamedTuple):
+    root: dict[str, VariableNode]  # the variable tree
+    warnings: list[str]  # a name the template uses as both a value and an object
+    conflict_paths: set[str]  # the paths behind those warnings, so a later check doesn't double up
+    printed: list[PrintedPath]  # bare {{ x }} prints, judged once the tree is finished
 
 
 class LeafUse(Enum):
@@ -54,22 +74,26 @@ class VariableTreeVisitor(NodeVisitor):
 
         root = {"outer": {"type": "list"}, "inner": {"type": "list", "properties": {"x": {"type": "string"}}}}
 
-    `conflicts` and `printed` are gathered here because only this pass sees how each path is used
-    Every visit_* method sets `lineno`, otherwise a warning cites a stale line
+    `walk` returns the tree alongside the warnings and printed paths, because only this pass sees how
+    each path is used. Every visit_* method sets `lineno`, otherwise a warning cites a stale line
     """
 
     def __init__(self) -> None:
-        self.root: dict[str, VariableNode] = {}
+        self._root: dict[str, VariableNode] = {}
         self._scope: list[dict[str, VariableNode]] = [{}]
-        self.conflicts: list[str] = []
-        self.conflict_paths: set[str] = set()
+        self._warnings: list[str] = []
+        self._conflict_paths: set[str] = set()
         # {{ case }} only looks wrong once {{ case.title }} somewhere else has made `case` an object
-        # So record (lineno, root, segments) while we can still see the bare print, and let
+        # So record the bare print while we can still see it, and let
         # check_no_objects_printed_directly decide once the tree is finished
-        self.printed: list[tuple[int, str, list[str]]] = []
+        self._printed_paths: list[PrintedPath] = []
         # Leaves seen only as a truthiness guard, which says nothing about their shape
         self._guarded: list[VariableNode] = []
         self._lineno = 0
+
+    def walk(self, ast: nodes.Template) -> WalkResult:
+        self.visit(ast)
+        return WalkResult(self._root, self._warnings, self._conflict_paths, self._printed_paths)
 
     def visit_Output(self, node: nodes.Output) -> None:  # noqa: N802
         for child in node.nodes:
@@ -152,7 +176,9 @@ class VariableTreeVisitor(NodeVisitor):
         root, segments = path
         if self._lookup_frame(root) or any(isinstance(segment, int) for segment in segments):
             return
-        self.printed.append((self._lineno, root, [segment for segment in segments if isinstance(segment, str)]))
+        self._printed_paths.append(
+            PrintedPath(self._lineno, root, [segment for segment in segments if isinstance(segment, str)])
+        )
 
     def _record_load(self, node: nodes.Node) -> None:
         if isinstance(node, nodes.CondExpr):
@@ -220,10 +246,10 @@ class VariableTreeVisitor(NodeVisitor):
     def _locate_leaf(self, root: str, attrs: list[NamePathSegment]) -> tuple[dict[str, VariableNode], str] | None:
         frame = self._lookup_frame(root)
         if not attrs:
-            return frame or self.root, root
+            return frame or self._root, root
 
         # A local starts from the node it's bound to, so its segments land on that node
-        container = frame[root].setdefault("properties", {}) if frame else self.root
+        container = frame[root].setdefault("properties", {}) if frame else self._root
         # The name still waiting to be placed. None when container already points at it
         key: str | None = None if frame else root
         path = [root]
@@ -252,8 +278,8 @@ class VariableTreeVisitor(NodeVisitor):
             return
         if not existing or existing.get("type") not in ("string", "boolean"):
             return
-        self.conflict_paths.add(path)
-        self.conflicts.append(
+        self._conflict_paths.add(path)
+        self._warnings.append(
             warning_to_string(
                 line_no=self._lineno,
                 title=f"'{path}' is used as both a value and an object",

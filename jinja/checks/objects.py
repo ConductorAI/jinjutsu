@@ -7,17 +7,17 @@ Warnings:
 """
 
 from ..utils.string_utils import warning_to_string
-from ..variable_tree import VariableNode, VariableTreeVisitor
+from ..variable_tree import VariableNode, WalkResult
 
 
-def check_no_objects_printed_directly(visitor: VariableTreeVisitor) -> list[str]:
+def check_no_objects_printed_directly(walked: WalkResult) -> list[str]:
     warnings = []
-    for lineno, root, attrs in visitor.printed:
-        node = _lookup_path(visitor.root, root, attrs)
+    for lineno, root, attrs in walked.printed:
+        node = _lookup_path(walked.root, root, attrs)
         node_type = node.get("type") if node else None
         path = ".".join([root, *attrs])
         # Already reported as a clash, so one warning is enough
-        if node_type not in ("object", "list") or path in visitor.conflict_paths:
+        if node_type not in ("object", "list") or path in walked.conflict_paths:
             continue
         if node_type == "object":
             article, rendered = "an object", "{'field': ...}"

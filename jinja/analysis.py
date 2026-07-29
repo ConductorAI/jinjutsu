@@ -62,8 +62,7 @@ def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, Variable
     if not ast:
         return {}, []
 
-    visitor = VariableTreeVisitor()
-    visitor.visit(ast)
+    walked = VariableTreeVisitor().walk(ast)
 
     # Jinja decides which names the template actually asks for
     # The walk only says what shape each one has
@@ -73,9 +72,9 @@ def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, Variable
     except TemplateAssertionError:
         return {}, []
 
-    variables: dict[str, VariableNode] = {name: visitor.root.get(name, {"type": "string"}) for name in sorted(required)}
+    variables: dict[str, VariableNode] = {name: walked.root.get(name, {"type": "string"}) for name in sorted(required)}
     _refine_list_formats(variables)
-    return variables, list(dict.fromkeys(visitor.conflicts + check_no_objects_printed_directly(visitor)))
+    return variables, list(dict.fromkeys(walked.warnings + check_no_objects_printed_directly(walked)))
 
 
 def _refine_list_formats(tree: dict[str, VariableNode]) -> None:
