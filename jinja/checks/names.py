@@ -87,8 +87,8 @@ def check_builtin_method_attributes(full_text: str) -> list[str]:
     return warnings
 
 
-# Rewrite each '.field' match as bracket access, right to left so earlier offsets stay valid
 def _bracket_matches(tag_text: str, matches: list[re.Match[str]]) -> str:
+    """Rewrite each '.field' match as bracket access, right to left so earlier offsets stay valid"""
     for match in reversed(matches):
         tag_text = f"{tag_text[: match.start()]}[{match.group(1)!r}]{tag_text[match.end() :]}"
     return tag_text

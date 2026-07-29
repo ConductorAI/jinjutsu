@@ -241,8 +241,8 @@ class VariableTreeVisitor(NodeVisitor):
                 path.append(segment)
         return (container, key) if key else None
 
-    # Record a warning when a path already used as a plain value is now being read as an object
     def _record_container_conflict(self, container: dict[str, VariableNode], key: str, path: str, segment: str) -> None:
+        """Record a warning when a path already used as a plain value is now being read as an object"""
         existing = container.get(key)
         if any(leaf is existing for leaf in self._guarded):
             # {% if section %}{{ section.title }}{% endif %} guards an optional object and isn't considered a clash

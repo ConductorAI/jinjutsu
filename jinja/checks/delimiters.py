@@ -94,8 +94,8 @@ def check_malformed_tags(lines: list[str]) -> list[str]:
     return warnings
 
 
-# Check for statement tags whose opening '%' is missing or out of position, like '{if% x %}'
 def check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
+    """Check for statement tags whose opening '%' is missing or out of position, like '{if% x %}'"""
     warnings = []
     for line_num, line in enumerate(lines, start=1):
         for match in re.finditer(r"\{(?![%{#])([^{}]*?)%\}", line):

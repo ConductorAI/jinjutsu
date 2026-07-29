@@ -37,8 +37,8 @@ def analyze_jinja_template(template_text: str) -> TemplateReport:
     return TemplateReport(variables, validation_errors + variable_conflict_errors)
 
 
-# Run every check, falling back to jinja's parser for what we don't cover
 def validate(full_text: str, error: TemplateSyntaxError | None) -> list[str]:
+    """Run every check, falling back to jinja's parser for what we don't cover"""
     lines = full_text.split("\n")
 
     # A broken delimiter makes Jinja read the tag as plain text, so nothing after it can be trusted
@@ -57,8 +57,8 @@ def validate(full_text: str, error: TemplateSyntaxError | None) -> list[str]:
     return warnings
 
 
-# Build the variable tree using nodes from a previously parsed template, and warn about issues it finds
 def walk(ast: nodes.Template | None) -> tuple[dict[str, VariableNode], list[str]]:
+    """Build the variable tree using nodes from a previously parsed template, and warn about issues it finds"""
     if not ast:
         return {}, []
 

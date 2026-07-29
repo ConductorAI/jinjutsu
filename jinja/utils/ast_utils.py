@@ -33,15 +33,15 @@ def split_ast_object_path(node: nodes.Node) -> tuple[str, list[NamePathSegment]]
     return None
 
 
-# Strip list operations from an expression, so `variable | sort | unique` yields `variable`
 def strip_list_operations(node: nodes.Node) -> nodes.Node:
+    """Strip list operations from an expression, so `variable | sort | unique` yields `variable`"""
     while isinstance(node, nodes.Filter) and node.node:
         node = node.node
     return node
 
 
-# Find local variables a template invents, like the x in {% for x in items %} or {% set x = 1 %}
 def jinja_local_variables(target: nodes.Node) -> list[str]:
+    """Find local variables a template invents, like the x in {% for x in items %} or {% set x = 1 %}"""
     if isinstance(target, nodes.Name):
         return [target.name]
     if isinstance(target, nodes.Tuple):
