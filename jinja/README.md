@@ -342,7 +342,7 @@ Each `checks/` module is named for **what is wrong**, not for what it reads.
 | `utils/ast_utils.py`    | reading a Jinja AST node                                                              |
 | `utils/docxtpl_utils.py`| parsing, and rewriting docxtpl's tag syntax                                           |
 | `utils/string_utils.py` | wording a warning, blanking out comments                                              |
-| `utils/tag_utils.py`    | walking every Jinja tag in a template, in order                                       |
+| `utils/tag_utils.py`    | `TemplateText`, the views every check shares, including every Jinja tag in order       |
 | `tests/`                | one file per check, one test per edge case, so a failure names the case that broke     |
 
 [docxtpl]: https://docxtpl.readthedocs.io

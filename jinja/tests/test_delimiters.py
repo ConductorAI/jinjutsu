@@ -107,3 +107,20 @@ def test_broken_delimiter_suppresses_the_end_tag_it_orphans():
 
     assert any("Extra space after '{' in tag" in w for w in warnings)
     assert not any("Line 5" in w for w in warnings)
+
+
+def test_broken_delimiters_inside_a_comment_are_not_flagged():
+    for text in ("{# {{ x } #}", "{# {% if x } #}", "{# { % if x %} #}", "{# {if% x %} #}", "{# { { x }} #}"):
+        warnings = warnings_for(text)
+
+        assert not warnings, text
+
+
+def test_comment_on_the_same_line_does_not_hide_a_real_broken_delimiter():
+    text = "{# note #} {{ x }"
+
+    warnings = warnings_for(text)
+
+    assert any("Missing closing '}}' in variable tag" in w for w in warnings)
+    # The author sees the line as they wrote it, comment included, not the blanked copy we match against
+    assert any(w.endswith(text) for w in warnings)

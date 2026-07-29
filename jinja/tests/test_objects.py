@@ -106,3 +106,15 @@ def test_unparseable_template_has_no_conflicts():
     text = "{{ a }}{{ a.b }}{% for x in rows %}"
 
     assert conflicts_for(text) == []
+
+
+def test_conflict_inside_a_call_block_cites_the_call_line():
+    text = "{{ a }}\nX\nX\n{% call m(a.b) %}{% endcall %}"
+
+    assert any("Line 4:" in c for c in conflicts_for(text)), conflicts_for(text)
+
+
+def test_conflict_inside_a_macro_cites_the_macro_line():
+    text = "{{ a }}\nX\n{% macro m(p) %}{{ a.b }}{% endmacro %}"
+
+    assert any("Line 3:" in c for c in conflicts_for(text)), conflicts_for(text)

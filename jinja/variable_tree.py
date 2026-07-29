@@ -113,9 +113,11 @@ class VariableTreeVisitor(NodeVisitor):
         self._visit_parameterized_block(node.targets, node.body)
 
     def visit_Macro(self, node: nodes.Macro) -> None:  # noqa: N802
+        self._lineno = node.lineno
         self._visit_parameterized_block(node.args, node.body)
 
     def visit_CallBlock(self, node: nodes.CallBlock) -> None:  # noqa: N802
+        self._lineno = node.lineno
         self._record_load(node.call)
         self._visit_parameterized_block(node.args, node.body)
 
@@ -228,11 +230,11 @@ class VariableTreeVisitor(NodeVisitor):
 
         for segment in attrs:
             if isinstance(segment, int):
-                if not key:
+                if key is None:
                     return None
                 container = self._ensure_container(container, key, as_list=True)
                 key = None
-            elif not key:
+            elif key is None:
                 key = segment
                 path.append(segment)
             else:
@@ -240,7 +242,7 @@ class VariableTreeVisitor(NodeVisitor):
                 container = self._ensure_container(container, key, as_list=False)
                 key = segment
                 path.append(segment)
-        return (container, key) if key else None
+        return (container, key) if key is not None else None
 
     def _record_container_conflict(self, container: dict[str, VariableNode], key: str, path: str, segment: str) -> None:
         """Record a warning when a path already used as a plain value is now being read as an object"""

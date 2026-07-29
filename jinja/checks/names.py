@@ -8,7 +8,7 @@ import re
 from collections.abc import Iterable
 
 from ..utils.string_utils import warning_to_string
-from ..utils.tag_utils import find_tags
+from ..utils.tag_utils import Tag
 
 HYPHENATED_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*(?:\.\w+)*(?:-[A-Za-z_]\w*)+")
 
@@ -18,7 +18,7 @@ BUILTIN_METHOD = (
 )
 
 
-def check_hyphenated_variables(full_text: str) -> list[str]:
+def check_hyphenated_variables(tags: list[Tag]) -> list[str]:
     """
     Confirm intent for names containing hyphens, which jinja interprets as subtraction
 
@@ -26,7 +26,7 @@ def check_hyphenated_variables(full_text: str) -> list[str]:
     The spaced {{ a - b }} form is also not flagged as well as the whitespace control in {%- if x %}
     """
     warnings = []
-    for line_num, line, tag_text in find_tags(full_text):
+    for line_num, line, tag_text in tags:
         for match in HYPHENATED_NAME.finditer(_replace_string_literals_with_spaces(tag_text)):
             name = match.group()
             warnings.append(
@@ -47,7 +47,7 @@ def check_hyphenated_variables(full_text: str) -> list[str]:
     return warnings
 
 
-def check_builtin_method_attributes(full_text: str) -> list[str]:
+def check_builtin_method_attributes(tags: list[Tag]) -> list[str]:
     """
     Check for fields read with dot syntax whose name is also a built-in dict or list method
 
@@ -57,7 +57,7 @@ def check_builtin_method_attributes(full_text: str) -> list[str]:
     Explicit calls like x.items() are deliberate and not flagged
     """
     warnings = []
-    for line_num, line, tag_text in find_tags(full_text):
+    for line_num, line, tag_text in tags:
         matches = list(re.finditer(rf"\.({BUILTIN_METHOD})\b(?!\s*\()", _replace_string_literals_with_spaces(tag_text)))
         if not matches:
             continue

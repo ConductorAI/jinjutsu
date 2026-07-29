@@ -15,6 +15,7 @@ from .checks.names import check_builtin_method_attributes, check_hyphenated_vari
 from .checks.objects import check_no_objects_printed_directly
 from .checks.parser import check_jinja_syntax
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
+from .utils.tag_utils import TemplateText, read_template
 from .variable_tree import VariableNode, VariableTreeVisitor
 
 JINJA_ENV = Environment()
@@ -31,29 +32,29 @@ def analyze_jinja_template(template_text: str) -> TemplateReport:
         jinja_ast = JINJA_ENV.parse(normalize_docxtpl_prefixes(template_text))
     except TemplateSyntaxError as e:
         syntax_error = e
-    validation_errors = _validate(template_text, syntax_error)
+    validation_errors = _validate(read_template(template_text), syntax_error)
     variables, variable_conflict_errors = _build_variable_tree(jinja_ast)
     return TemplateReport(variables, validation_errors + variable_conflict_errors)
 
 
-def _validate(full_text: str, error: TemplateSyntaxError | None) -> list[str]:
+def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[str]:
     """Run every check, falling back to jinja's parser for what we don't cover"""
-    lines = full_text.split("\n")
-
     # A broken delimiter makes Jinja read the tag as plain text, so nothing after it can be trusted
     # Neither Jinja's own error nor the tag counts mean anything in this case, so hide those errors
-    broken_delimiters = check_malformed_tags(lines) + check_misplaced_statement_delimiters(lines)
-    unbalanced_blocks = check_mismatched_tags(full_text)
+    broken_delimiters = check_malformed_tags(text) + check_misplaced_statement_delimiters(text)
+    unbalanced_blocks = check_mismatched_tags(text.source)
 
     warnings = list(broken_delimiters or unbalanced_blocks)
     if not broken_delimiters:
-        warnings.extend(check_jinja_syntax(full_text, error, blocks_already_counted=bool(unbalanced_blocks)))
+        warnings.extend(check_jinja_syntax(text.lines, error, blocks_already_counted=bool(unbalanced_blocks)))
 
     # A template can be perfectly valid and still hit these, so they must never hide a real syntax errors above
-    warnings.extend(check_hyphenated_variables(full_text))
-    warnings.extend(check_builtin_method_attributes(full_text))
-    warnings.extend(check_merge_tags_outside_loops(full_text))
-    return warnings
+    warnings.extend(check_hyphenated_variables(text.tags))
+    warnings.extend(check_builtin_method_attributes(text.tags))
+    warnings.extend(check_merge_tags_outside_loops(text.tags))
+
+    # The same mistake twice on one line reads as one problem, and the UI keys each warning by its text
+    return list(dict.fromkeys(warnings))
 
 
 def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, VariableNode], list[str]]:

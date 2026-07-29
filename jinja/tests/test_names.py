@@ -179,3 +179,16 @@ def test_a_real_collision_after_a_comment_is_still_reported():
 
     assert any("Line 2: Field 'items' collides with a built-in method" in w for w in warnings)
     assert not any("Field 'keys'" in w for w in warnings)
+
+
+def test_the_same_bad_name_twice_on_one_line_warns_once():
+    # The UI keys each warning by its text, so byte-identical duplicates cannot both be shown
+    text = "{{ a-b }} and {{ a-b }}"
+
+    assert len(warnings_for(text)) == 1, warnings_for(text)
+
+
+def test_the_same_bad_name_on_two_lines_warns_twice():
+    text = "{{ a-b }}\n{{ a-b }}"
+
+    assert len(warnings_for(text)) == 2, warnings_for(text)

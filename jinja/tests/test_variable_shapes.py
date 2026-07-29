@@ -167,3 +167,10 @@ def test_plain_variable_still_extracted():
     variables = variables_for(text)
 
     assert "plain_var" in variables
+
+
+def test_empty_string_key_is_kept_as_a_field():
+    # '' is a real key, so it must not be read as "no key left to place"
+    text = "{{ r[''] }}"
+
+    assert variables_for(text) == {"r": {"type": "object", "properties": {"": {"type": "string"}}}}

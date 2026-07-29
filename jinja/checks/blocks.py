@@ -7,16 +7,15 @@ Warnings:
 
 import re
 
-from ..utils.string_utils import replace_comments_with_spaces, warning_to_string
-from ..utils.tag_utils import find_tags, statement_closing, statement_keyword, statement_opening
+from ..utils.string_utils import warning_to_string
+from ..utils.tag_utils import Tag, statement_closing, statement_keyword, statement_opening
 
 
-def check_mismatched_tags(full_text: str) -> list[str]:
+def check_mismatched_tags(source: str) -> list[str]:
     warnings = []
-    full_text = replace_comments_with_spaces(full_text)
 
-    for_count = len(re.findall(statement_opening("for"), full_text))
-    endfor_count = len(re.findall(statement_closing("endfor"), full_text))
+    for_count = len(re.findall(statement_opening("for"), source))
+    endfor_count = len(re.findall(statement_closing("endfor"), source))
     if for_count != endfor_count:
         warnings.append(
             _tag_count(
@@ -26,8 +25,8 @@ def check_mismatched_tags(full_text: str) -> list[str]:
             )
         )
 
-    if_count = len(re.findall(statement_opening("if"), full_text))
-    endif_count = len(re.findall(statement_closing("endif"), full_text))
+    if_count = len(re.findall(statement_opening("if"), source))
+    endif_count = len(re.findall(statement_closing("endif"), source))
     if if_count != endif_count:
         warnings.append(
             _tag_count(
@@ -40,7 +39,7 @@ def check_mismatched_tags(full_text: str) -> list[str]:
     return warnings
 
 
-def check_merge_tags_outside_loops(full_text: str) -> list[str]:
+def check_merge_tags_outside_loops(tags: list[Tag]) -> list[str]:
     """
     Check for a docxtpl cell merge, {% vm %} or {% hm %}, used outside a loop
 
@@ -49,7 +48,7 @@ def check_merge_tags_outside_loops(full_text: str) -> list[str]:
     """
     warnings = []
     depth = 0
-    for line_num, line, tag_text in find_tags(full_text):
+    for line_num, line, tag_text in tags:
         if match := re.match(statement_keyword("for|endfor|vm|hm"), tag_text):
             keyword = match.group(1)
             if keyword == "for":

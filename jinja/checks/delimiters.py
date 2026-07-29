@@ -11,15 +11,15 @@ Warnings:
 import re
 
 from ..utils.string_utils import warning_to_string
-from ..utils.tag_utils import STATEMENT_KEYWORD
+from ..utils.tag_utils import STATEMENT_KEYWORD, TemplateText
 
 
-def check_malformed_tags(lines: list[str]) -> list[str]:
+def check_malformed_tags(text: TemplateText) -> list[str]:
     warnings = []
-    for line_num, line in enumerate(lines, start=1):
+    for line_num, (line, scanned) in enumerate(zip(text.lines, text.source_lines, strict=True), start=1):
         # Check for { % instead of {%
-        if re.search(r"\{\s+%", line):
-            match = re.search(r"\{\s+%.*?%\s*\}", line)
+        if re.search(r"\{\s+%", scanned):
+            match = re.search(r"\{\s+%.*?%\s*\}", scanned)
             if match:
                 malformed_tag = match.group(0)
                 warnings.append(
@@ -32,8 +32,8 @@ def check_malformed_tags(lines: list[str]) -> list[str]:
                     )
                 )
         # Check for % } instead of %}
-        elif re.search(r"%\s+\}", line):
-            match = re.search(r"\{%.*?%\s+\}", line)
+        elif re.search(r"%\s+\}", scanned):
+            match = re.search(r"\{%.*?%\s+\}", scanned)
             if match:
                 malformed_tag = match.group(0)
                 warnings.append(
@@ -47,7 +47,7 @@ def check_malformed_tags(lines: list[str]) -> list[str]:
                 )
 
         # Check for { { instead of {{
-        if match := re.search(r"(?<!\{)\{\s+\{(?!\{).*?\}\s*\}", line):
+        if match := re.search(r"(?<!\{)\{\s+\{(?!\{).*?\}\s*\}", scanned):
             malformed_tag = match.group(0)
             warnings.append(
                 warning_to_string(
@@ -61,7 +61,7 @@ def check_malformed_tags(lines: list[str]) -> list[str]:
             )
 
         # Check for incomplete variable tags ({{ without }} or with only one })
-        if match := re.search(r"\{\{[^}]*\}(?!\})", line):
+        if match := re.search(r"\{\{[^}]*\}(?!\})", scanned):
             incomplete_tag = match.group(0)
             warnings.append(
                 warning_to_string(
@@ -75,9 +75,9 @@ def check_malformed_tags(lines: list[str]) -> list[str]:
 
         # Check for incomplete statement tags ({% without %} or with only one %)
         if (
-            re.search(r"\{%[^}]*(?<!%)(?<!%\s)\}(?!\})", line)
-            and not re.search(r"\{%[^}]*%\}", line)
-            and (match := re.search(r"\{%[^}]*\}", line))
+            re.search(r"\{%[^}]*(?<!%)(?<!%\s)\}(?!\})", scanned)
+            and not re.search(r"\{%[^}]*%\}", scanned)
+            and (match := re.search(r"\{%[^}]*\}", scanned))
         ):
             incomplete_tag = match.group(0)
             warnings.append(
@@ -93,11 +93,11 @@ def check_malformed_tags(lines: list[str]) -> list[str]:
     return warnings
 
 
-def check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
+def check_misplaced_statement_delimiters(text: TemplateText) -> list[str]:
     """Check for statement tags whose opening '%' is missing or out of position, like '{if% x %}'"""
     warnings = []
-    for line_num, line in enumerate(lines, start=1):
-        for match in re.finditer(r"\{(?![%{#])([^{}]*?)%\}", line):
+    for line_num, (line, scanned) in enumerate(zip(text.lines, text.source_lines, strict=True), start=1):
+        for match in re.finditer(r"\{(?![%{#])([^{}]*?)%\}", scanned):
             content = match.group(1)
             if not re.search(rf"\b(?:{STATEMENT_KEYWORD})\b", content):
                 continue
