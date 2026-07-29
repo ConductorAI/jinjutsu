@@ -1,4 +1,5 @@
-from conduit.server.features.doj.templates.jinja.tests.helpers import variables_for
+from conduit.server.features.doj.templates.jinja.tests.helpers import variables_for, warnings_for
+from conduit.server.features.doj.templates.jinja.utils.docxtpl_utils import normalize_docxtpl_prefixes
 
 
 def test_extracts_docxtpl_tr_loop_variable():
@@ -30,6 +31,32 @@ def test_docxtpl_cell_tags_supply_their_argument_as_a_variable():
     assert variables["col_count"] == {"type": "string"}
     assert variables["row_color"] == {"type": "string"}
     assert variables["title"] == {"type": "string"}
+
+
+def test_cell_tag_split_across_a_line_keeps_its_newline():
+    text = "{% colspan\ncol %}"
+
+    normalized = normalize_docxtpl_prefixes(text)
+
+    assert len(normalized) == len(text)
+    assert normalized.count("\n") == text.count("\n")
+
+
+def test_cell_tag_split_across_a_line_does_not_shift_later_line_numbers():
+    text = "line one\n{% colspan\ncol %}\nline four\n{% if a b c %}x{% endif %}"
+
+    warnings = warnings_for(text)
+
+    assert any("Line 5:" in w for w in warnings)
+    assert any("{% if a b c %}x{% endif %}" in w for w in warnings)
+
+
+def test_cell_tag_split_across_a_line_still_supplies_its_variable():
+    text = "{% colspan\ncol_count %}{{ title }}"
+
+    variables = variables_for(text)
+
+    assert sorted(variables) == ["col_count", "title"]
 
 
 def test_docxtpl_merge_tags_supply_no_variable():

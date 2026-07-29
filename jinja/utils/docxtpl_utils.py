@@ -24,5 +24,6 @@ def _blank(text: str) -> str:
 def _pad_cell_tag(match: re.Match[str]) -> str:
     """Rewrite {% colspan n %} as {{ n }}, padded inside the braces back to the original width"""
     expression = match.group(1)
-    padding = len(match.group()) - len("{{  }}") - len(expression)
-    return "{{ " + expression + " " * padding + " }}"
+    newlines = "\n" * (match.group().count("\n") - expression.count("\n"))
+    padding = len(match.group()) - len("{{  }}") - len(expression) - len(newlines)
+    return "{{ " + expression + " " * padding + newlines + " }}"
