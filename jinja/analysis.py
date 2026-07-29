@@ -9,12 +9,14 @@ from typing import NamedTuple
 
 from jinja2 import Environment, TemplateAssertionError, TemplateSyntaxError, meta, nodes
 
+from .checks.blocks import check_merge_tags_outside_loops, check_mismatched_tags
 from .checks.delimiters import check_malformed_tags, check_misplaced_statement_delimiters
+from .checks.names import check_builtin_method_attributes, check_hyphenated_variables
 from .checks.objects import check_no_objects_printed_directly
-from .checks.syntax import check_jinja_syntax, check_mismatched_tags
-from .checks.tags import check_builtin_method_attributes, check_hyphenated_variables, check_merge_tags_outside_loops
+from .checks.parser import check_jinja_syntax
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
-from .variable_tree import VariableNode, VariableTreeVisitor, refine_list_formats
+from .utils.tree_utils import refine_list_formats
+from .variable_tree import VariableNode, VariableTreeVisitor
 
 JINJA_ENV = Environment()
 
@@ -30,13 +32,13 @@ class TemplateReport(NamedTuple):
 
 
 def analyze_jinja_template(template_text: str) -> TemplateReport:
-    ast, syntax_error = None, None
+    jinja_ast, syntax_error = None, None
     try:
-        ast = JINJA_ENV.parse(normalize_docxtpl_prefixes(template_text))
+        jinja_ast = JINJA_ENV.parse(normalize_docxtpl_prefixes(template_text))
     except TemplateSyntaxError as e:
         syntax_error = e
     validation_errors = validate(template_text, syntax_error)
-    variables, variable_conflict_errors = walk(ast)
+    variables, variable_conflict_errors = walk(jinja_ast)
     return TemplateReport(variables, validation_errors + variable_conflict_errors)
 
 

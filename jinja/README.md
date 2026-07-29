@@ -29,8 +29,9 @@ template — a parse failure comes back as a diagnostic.
 Line 2: Field 'items' collides with a built-in method
   Found: {{ store.items }}
   Fix:   {{ store['items'] }}
-  Reason: Jinja reads '.items' as the dictionary's own method, so the document renders the
-          method instead of your value. Use bracket syntax.
+  Reason: Jinja reads '.items' as the value's own method, so the document renders the method
+          instead of your value. Use bracket syntax.
+  {{ store.items }}
 ```
 
 ## The variable tree
@@ -87,7 +88,7 @@ targets, and macro, call and with block parameters.
 `report.diagnostics` is a list of finished strings, ready to display. Three layouts, each built by
 one helper:
 
-`warning_to_string` in `jinja_utils.py` — most warnings, wherever there is a line to point at:
+`warning_to_string` in `utils/string_utils.py` — most warnings, wherever there is a line to point at:
 
 ```
 Line 4: 'a' is used as both a value and an object
@@ -97,7 +98,7 @@ Line 4: 'a' is used as both a value and an object
   {{ a.b }}                                      <- optional source line
 ```
 
-`_tag_count` in `checks/syntax.py` — a count that is wrong across the whole template, so there is no
+`_tag_count` in `checks/blocks.py` — a count that is wrong across the whole template, so there is no
 one line to blame:
 
 ```
@@ -106,7 +107,7 @@ Mismatched loop tags
   Fix: Each {% for %} must have a corresponding {% endfor %}   <- one space
 ```
 
-`_syntax_error` in `checks/syntax.py` — Jinja's own message, wrapped in friendlier guidance and kept
+`_syntax_error` in `checks/parser.py` — Jinja's own message, wrapped in friendlier guidance and kept
 underneath:
 
 ```
@@ -170,17 +171,19 @@ diagnostic in the rest of the template.
 |---|---|
 | `analysis.py` | `analyze_jinja_template()` and `TemplateReport` — the entry point, the walk that builds the tree, and which warnings survive |
 | `variable_tree.py` | `VariableNode` and `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
-| `checks/delimiters.py` | tags whose delimiters are broken, so Jinja never sees them as tags |
-| `checks/tags.py` | what is written inside a well-formed tag |
-| `checks/syntax.py` | block balance and Jinja's own parser |
-| `checks/objects.py` | objects and lists printed whole, which only the finished tree reveals |
+| `checks/delimiters.py` | the braces are malformed, so Jinja never sees a tag at all |
+| `checks/names.py` | a name inside a tag will not resolve the way it is written |
+| `checks/blocks.py` | block structure is wrong — counts do not match, or a tag needs an enclosing loop |
+| `checks/parser.py` | Jinja's own parse error, reworded |
+| `checks/objects.py` | an object or list is printed directly |
 | `utils/ast_utils.py` | reading a Jinja AST node |
 | `utils/docxtpl_utils.py` | parsing, and rewriting docxtpl's tag syntax |
-| `utils/string_utils.py` | wording a warning, and blanking out comments |
+| `utils/string_utils.py` | wording a warning, blanking out comments |
+| `utils/tag_utils.py` | walking every Jinja tag in a template, in order |
+| `utils/tree_utils.py` | reading and finishing the variable tree once the walk is done |
 | `tests/` | one test per edge case, so a failure names the case that broke |
 
-`checks/` is split by **what each module reads** — raw lines, tag contents, the parser, or the
-finished variable tree. That is also why `delimiters.py` works a line at a time and the others do
-not.
+Each `checks/` module is named for **what is wrong**, not for what it reads. `delimiters.py` works a
+line at a time because a tag with no delimiters cannot be found as a tag.
 
 [docxtpl]: https://docxtpl.readthedocs.io

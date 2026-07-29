@@ -12,7 +12,7 @@ import re
 
 from ..utils.string_utils import warning_to_string
 
-_JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
+JINJA_STATEMENT_KEYWORD = r"(?:if|elif|else|endif|for|endfor|set|endset)"
 
 
 def check_malformed_tags(lines: list[str]) -> list[str]:
@@ -105,7 +105,7 @@ def check_misplaced_statement_delimiters(lines: list[str]) -> list[str]:
     for line_num, line in enumerate(lines, start=1):
         for match in re.finditer(r"\{(?![%{#])([^{}]*?)%\}", line):
             content = match.group(1)
-            if not re.search(rf"\b{_JINJA_STATEMENT_KEYWORD}\b", content):
+            if not re.search(rf"\b{JINJA_STATEMENT_KEYWORD}\b", content):
                 continue
             if re.match(r"\s*%", content):
                 # '{ % if x %}' is the extra-space case, already reported by check_malformed_tags

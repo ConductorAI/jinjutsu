@@ -1,0 +1,22 @@
+from jinja2 import Environment, TemplateSyntaxError
+
+from conduit.server.features.doj.templates.jinja import analyze_jinja_template
+from conduit.server.features.doj.templates.jinja.analysis import walk
+from conduit.server.features.doj.templates.jinja.utils.docxtpl_utils import normalize_docxtpl_prefixes
+
+
+def warnings_for(text: str) -> list[str]:
+    return analyze_jinja_template(text).diagnostics
+
+
+def variables_for(text: str):
+    return analyze_jinja_template(text).variables
+
+
+def conflicts_for(text: str) -> list[str]:
+    "Just what the walk noticed, without the text checks analyze_jinja_template() merges in alongside"
+    try:
+        ast = Environment().parse(normalize_docxtpl_prefixes(text))
+    except TemplateSyntaxError:
+        ast = None
+    return walk(ast)[1]

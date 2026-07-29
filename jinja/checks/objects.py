@@ -1,18 +1,19 @@
 """
 Warnings:
 - '...' is an object and cannot be printed directly   {{ case }} where the template also reads case.title
-- '...' is a list and cannot be printed directly     {{ rows }} where the template also reads row.name
+- '...' is a list and cannot be printed directly      {{ rows }} where the template also reads row.name
 """
 
 from ..utils.string_utils import warning_to_string
-from ..variable_tree import VariableNode, VariableTreeVisitor
+from ..utils.tree_utils import lookup_path
+from ..variable_tree import VariableTreeVisitor
 
 
 def check_no_objects_printed_directly(visitor: VariableTreeVisitor) -> list[str]:
     """Warn for each {{ a.b }} that turned out to name an object or a list rather than a value."""
     warnings = []
     for lineno, root, attrs in visitor.printed:
-        node = _lookup_path(visitor.root, root, attrs)
+        node = lookup_path(visitor.root, root, attrs)
         node_type = node.get("type") if node else None
         path = ".".join([root, *attrs])
         # Already reported as a clash. Same cause, so one warning is enough.
@@ -37,12 +38,3 @@ def check_no_objects_printed_directly(visitor: VariableTreeVisitor) -> list[str]
             )
         )
     return warnings
-
-
-def _lookup_path(tree: dict[str, VariableNode], root: str, attrs: list[str]) -> VariableNode | None:
-    node = tree.get(root)
-    for segment in attrs:
-        if not node:
-            return None
-        node = node.get("properties", {}).get(segment)
-    return node

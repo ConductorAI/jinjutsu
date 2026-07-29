@@ -1,9 +1,5 @@
 """
-Warnings:
-- Mismatched loop tags                         {% for %} and {% endfor %} counts differ
-- Mismatched conditional tags                  {% if %} and {% endif %} counts differ
-
-Jinja's own parse errors, rewritten for readability:
+Jinja's own parse errors, rewritten in plainer words:
 - Use '==' to compare                          {% if a = 1 %}
 - Unexpected '...' after the expression        {% if a b c %}
 - '...' is a curly quote                       {% if a == “x” %}
@@ -16,39 +12,7 @@ import re
 
 from jinja2 import TemplateSyntaxError
 
-from ..utils.docxtpl_utils import DOCXTPL_TAG_PREFIX
-from ..utils.string_utils import replace_comments_with_spaces
-
 BLOCK_BALANCE_ERROR = re.compile(r"unexpected end of template|unknown tag 'end\w+'", re.IGNORECASE)
-
-
-def check_mismatched_tags(full_text: str) -> list[str]:
-    warnings = []
-    full_text = replace_comments_with_spaces(full_text)
-
-    for_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*for\s+", full_text))
-    endfor_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endfor\s*-?%\}}", full_text))
-    if for_count != endfor_count:
-        warnings.append(
-            _tag_count(
-                title="Mismatched loop tags",
-                found=f"{for_count} {{% for %}} tag(s) but {endfor_count} {{% endfor %}} tag(s)",
-                fix="Each {% for %} must have a corresponding {% endfor %}",
-            )
-        )
-
-    if_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*if\s+", full_text))
-    endif_count = len(re.findall(rf"\{{%-?{DOCXTPL_TAG_PREFIX}?\s*endif\s*-?%\}}", full_text))
-    if if_count != endif_count:
-        warnings.append(
-            _tag_count(
-                title="Mismatched conditional tags",
-                found=f"{if_count} {{% if %}} tag(s) but {endif_count} {{% endif %}} tag(s)",
-                fix="Each {% if %} must have a corresponding {% endif %}",
-            )
-        )
-
-    return warnings
 
 
 def check_jinja_syntax(full_text: str, error: TemplateSyntaxError | None, *, blocks_already_counted: bool) -> list[str]:
@@ -99,10 +63,6 @@ def check_jinja_syntax(full_text: str, error: TemplateSyntaxError | None, *, blo
         )
 
     return warnings
-
-
-def _tag_count(*, title: str, found: str, fix: str) -> str:
-    return f"{title}\n  Found: {found}\n  Fix: {fix}"
 
 
 def _syntax_error(*, title: str, error: str, line: int | None, source_line: str | None) -> str:
