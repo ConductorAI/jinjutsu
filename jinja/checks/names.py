@@ -102,4 +102,5 @@ def _join_quoted(names: Iterable[str]) -> str:
 
 
 def _replace_string_literals_with_spaces(tag_text: str) -> str:
+    # A tag is folded onto one line before it gets here, so there are no newlines to keep
     return re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", lambda m: " " * len(m.group()), tag_text)
