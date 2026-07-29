@@ -1,26 +1,9 @@
 """
 One problem found in a template, as data rather than as a finished sentence.
 
-Diagnostics are stored on the template row and rendered straight into the upload panel, so render()
-reproduces the exact bytes the checks used to build by hand. Rows written before this existed are
-never recomputed, and they sit in the same list as new ones, so a wording change here would show up
-as two styles in one panel. Change the wording only alongside a backfill.
-
-Three layouts earned their differences before the type existed and are kept verbatim:
-
-    DETAIL      Line 4: 'a' is used as both a value and an object
-                  Found: a.b
-                  Fix:   give the two uses different names          <- three spaces, aligned
-                  Reason: ...                                       <- optional
-                  {{ a.b }}                                         <- optional source line
-
-    TAG_COUNT   Mismatched loop tags                                <- no line, nothing to point at
-                  Found: 1 {% for %} tag(s) but 0 {% endfor %} tag(s)
-                  Fix: Each {% for %} must have a corresponding {% endfor %}   <- one space
-
-    SYNTAX      Line 2: Unexpected 'b' after the expression
-                  {% if a b c %}                                    <- preview, already indented
-                  Error: expected token 'end of statement block', got 'b'
+render() reproduces the display text. The three layouts and the reason they differ are in README.md,
+along with the warning that matters most here: diagnostics are stored per template row and never
+recomputed, so changing the wording shows old and new styles together. Backfill if you change it.
 """
 
 from dataclasses import dataclass

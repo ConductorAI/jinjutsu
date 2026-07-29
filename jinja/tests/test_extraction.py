@@ -1,5 +1,4 @@
-from conduit.server.features.doj.templates.jinja.extraction import analyze_template
-from conduit.server.features.doj.templates.jinja.jinja_utils import parse_result
+from conduit.server.features.doj.templates.jinja import analyze
 
 
 def test_extracts_docxtpl_tr_loop_variable():
@@ -52,7 +51,7 @@ def test_merge_tag_name_is_still_usable_as_a_variable():
 def test_unknown_filter_does_not_raise():
     text = "{{ amount | to_json }}"
 
-    assert analyze_template(parse_result(text)) == ({}, [])
+    assert analyze(text) == ({}, [])
 
 
 def test_plain_for_loop_still_extracted():
@@ -492,9 +491,13 @@ def test_unparseable_template_has_no_conflicts():
     assert _conflicts(text) == []
 
 
+# The two codes the variable walk emits, as opposed to the text checks
+_CONFLICT_CODES = ("value-and-object", "printed-whole-container")
+
+
 def _variables(text: str):
-    return analyze_template(parse_result(text)).variables
+    return analyze(text).variables
 
 
 def _conflicts(text: str) -> list[str]:
-    return [diagnostic.render() for diagnostic in analyze_template(parse_result(text)).conflicts]
+    return [d.render() for d in analyze(text).diagnostics if d.code in _CONFLICT_CODES]

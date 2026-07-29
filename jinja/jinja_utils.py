@@ -26,16 +26,9 @@ def normalize_docxtpl_prefixes(text: str) -> str:
     """
     Rewrite docxtpl's own tag syntax as vanilla Jinja so the parser accepts it.
 
-    Blanks the row/cell/paragraph/run prefixes and the {% vm %} and {% hm %} cell merges, and
-    rewrites {% colspan n %} and {% cellbg c %} to {{ n }} and {{ c }}, the substitution docxtpl
-    itself performs.
-
-    Every rewrite keeps the character count and the newline positions of what it replaces, so an
-    offset into the result addresses the same character in the original text and a line number
-    taken from the AST is a line number in the file the user uploaded. Whitespace inside a tag is
-    insignificant to Jinja, which is what leaves room to pad. Widening or narrowing the text here
-    would silently shift every warning that follows a docxtpl tag, and dropping a newline would
-    shift every warning in the rest of the template.
+    Every rewrite keeps the character count and the newline positions of what it replaces, so a
+    line number taken from the AST is a line number in the file the author uploaded. See README.md
+    for which tags are rewritten and why the widths have to match.
     """
     text = re.sub(rf"(\{{[%{{])({DOCXTPL_TAG_PREFIX})(?=\s)", lambda m: m.group(1) + _blank(m.group(2)), text)
     text = re.sub(_DOCXTPL_MERGE_TAG, lambda m: _blank(m.group()), text)
@@ -46,8 +39,8 @@ def parse_result(text: str) -> ParseResult:
     """
     Normalize docxtpl prefixes and parse the template, reporting failure instead of raising.
 
-    Returning the outcome rather than raising it lets analyze() call this once and hand the same
-    result to both the tree walk and the syntax check, which each need a different half of it.
+    Returning the outcome lets analyze() call this once and hand the same result to the tree walk
+    and the syntax check, which each need a different half of it.
     """
     try:
         return ParseResult(JINJA_ENV.parse(normalize_docxtpl_prefixes(text)), None)
@@ -95,6 +88,21 @@ def target_names(target: nodes.Node) -> list[str]:
     if isinstance(target, nodes.Tuple):
         return [item.name for item in target.items if isinstance(item, nodes.Name)]
     return []
+
+
+def blank_comments(full_text: str) -> str:
+    """
+    Replace {# #} spans so commented-out tags are not read as template code.
+
+    Line breaks are kept and every other character becomes a space, which leaves offsets and line
+    numbers unchanged for the checks that report them.
+    """
+    return re.sub(r"\{#.*?#\}", lambda m: re.sub(r"[^\n]", " ", m.group()), full_text, flags=re.DOTALL)
+
+
+def blank_string_literals(tag_text: str) -> str:
+    "Replace the contents of quoted literals so validation regex doesn't run on them"
+    return re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", lambda m: " " * len(m.group()), tag_text)
 
 
 def _blank(text: str) -> str:

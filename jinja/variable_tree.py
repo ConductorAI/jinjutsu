@@ -1,30 +1,9 @@
 """
 Model the shape of every variable a template uses, and build it from the Jinja AST.
 
-The shape is a tree of VariableNode entries, one tree per top-level variable. For example:
-
-    {{ case.header.title }}
-    {% for s in case.sections %}{{ s.name }}{% endfor %}
-    {% if case.sealed %}SEALED{% endif %}
-
-    case                object           -> {"header": ..., "sections": [...], "sealed": true}
-    |-- header          object           -> {"title": "..."}
-    |   `-- title       string
-    |-- sections        list of objects  -> [{"name": "..."}, {"name": "..."}]
-    |   `-- name        string              a field on each section, not on the list
-    `-- sealed          boolean
-
-Objects and lists are interior nodes while strings and booleans are leaves.
-
-Two parts of the shape are easy to misread:
-- properties means one thing per type. On an object it is that object's own fields. On a list it is
-  the fields of one element, so sections.properties.name says every section has a name and never
-  that the list itself has one. A loop is what puts it there: {% for s in sections %} binds s to
-  the sections node, so {{ s.name }} writes name into that node's properties.
-- item_format says what one element of a list looks like. It is filled in by extraction once the
-  walk is done, from whether the list ended up with properties, so it carries nothing the tree does
-  not already say. It exists for the agent prompt. A list of lists has no representation, so a grid
-  is flattened.
+The tree, what `properties` and `item_format` each mean, and how a type is decided are all in
+README.md. The short version: a VariableNode is an object, a list, a string or a boolean, objects
+and lists hold children under `properties`, and a list's `properties` describes one element.
 """
 
 from __future__ import annotations
