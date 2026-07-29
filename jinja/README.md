@@ -172,13 +172,13 @@ diagnostic in the rest of the template.
 
 | file | |
 |---|---|
-| `analysis.py` | `analyze_jinja_template()` and `TemplateReport` — the entry point, and the walk that builds the tree |
+| `analysis.py` | `analyze_jinja_template()` and `TemplateReport` — the entry point, the walk that builds the tree, and the suppression rule |
 | `variable_tree.py` | `VariableNode` and `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
-| `validation.py` | runs the checks and decides which answers survive — the suppression rule |
 | `checks/delimiters.py` | tags whose delimiters are broken, so Jinja never sees them as tags |
 | `checks/tags.py` | what is written inside a well-formed tag |
 | `checks/syntax.py` | block balance and Jinja's own parser |
 | `jinja_utils.py` | parsing, docxtpl normalization, text blanking, AST path helpers, `warning_to_string` |
+| `tests/` | one test per edge case, so a failure names the case that broke |
 
 `checks/` is split by **what each module reads** — raw lines, tag contents, or the parser. That is
 also why `delimiters.py` works a line at a time and the others do not.
