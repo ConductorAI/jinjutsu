@@ -1,5 +1,5 @@
-from conduit.server.features.doj.templates.jinja import analyze_jinja_template
-from conduit.server.features.doj.templates.jinja.tests.helpers import conflicts_for, variables_for
+from .. import analyze_jinja_template
+from .helpers import conflicts_for, variables_for
 
 
 def test_loop_locals_and_set_targets_are_not_extracted():

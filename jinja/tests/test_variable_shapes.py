@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.jinja.tests.helpers import variables_for
+from .helpers import variables_for
 
 
 def test_indexed_access_builds_list_of_objects():

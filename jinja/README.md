@@ -100,7 +100,7 @@ message · ❌ no finding, template reported clean
 ## Usage
 
 ```python
-from conduit.server.features.doj.templates.jinja import analyze_jinja_template
+from jinja import analyze_jinja_template
 
 report = analyze_jinja_template(template_text)
 

@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.jinja.tests.helpers import warnings_for
+from .helpers import warnings_for
 
 
 def test_single_equals_in_a_condition_suggests_the_comparison_operator():

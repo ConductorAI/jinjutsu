@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.jinja.tests.helpers import warnings_for
+from .helpers import warnings_for
 
 
 def test_docxtpl_prefixed_tags_do_not_trip_mismatch_check():

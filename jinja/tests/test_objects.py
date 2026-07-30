@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.jinja.tests.helpers import conflicts_for
+from .helpers import conflicts_for
 
 
 def test_path_used_as_both_value_and_object_is_reported():

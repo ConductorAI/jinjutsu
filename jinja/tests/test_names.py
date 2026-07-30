@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.jinja.tests.helpers import warnings_for
+from .helpers import warnings_for
 
 
 def test_builtin_method_field_is_reported_with_bracket_fix():

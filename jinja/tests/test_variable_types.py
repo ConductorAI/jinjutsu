@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.jinja.tests.helpers import variables_for
+from .helpers import variables_for
 
 
 def test_extracts_condition_only_variable_as_boolean():

@@ -1,4 +1,4 @@
-from conduit.server.features.doj.templates.jinja.tests.helpers import warnings_for
+from .helpers import warnings_for
 
 
 def test_warning_titles_render_jinja_delimiters_literally():
