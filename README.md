@@ -1,4 +1,4 @@
-# Jinja Template Analysis
+# Jinjutsu
 
 Read a Jinja template and answer two questions in one pass:
 
@@ -100,7 +100,7 @@ message · ❌ no finding, template reported clean
 ## Usage
 
 ```python
-from jinja_template_analysis import analyze_jinja_template
+from jinjutsu import analyze_jinja_template
 
 report = analyze_jinja_template(template_text)
 

@@ -1,8 +1,8 @@
 from jinja2 import Environment, TemplateSyntaxError
 
-from jinja_template_analysis import analyze_jinja_template
-from jinja_template_analysis.main import _build_variable_tree
-from jinja_template_analysis.utils.docxtpl_utils import normalize_docxtpl_prefixes
+from jinjutsu import analyze_jinja_template
+from jinjutsu.main import _build_variable_tree
+from jinjutsu.utils.docxtpl_utils import normalize_docxtpl_prefixes
 
 
 def warnings_for(text: str) -> list[str]:
