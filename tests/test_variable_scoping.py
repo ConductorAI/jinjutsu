@@ -1,4 +1,5 @@
-from .. import analyze_jinja_template
+from jinja_template_analysis import analyze_jinja_template
+
 from .helpers import conflicts_for, variables_for
 
 

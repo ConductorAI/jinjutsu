@@ -100,7 +100,7 @@ message · ❌ no finding, template reported clean
 ## Usage
 
 ```python
-from jinja import analyze_jinja_template
+from jinja_template_analysis import analyze_jinja_template
 
 report = analyze_jinja_template(template_text)
 

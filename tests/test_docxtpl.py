@@ -1,4 +1,5 @@
-from ..utils.docxtpl_utils import normalize_docxtpl_prefixes
+from jinja_template_analysis.utils.docxtpl_utils import normalize_docxtpl_prefixes
+
 from .helpers import variables_for, warnings_for
 
 

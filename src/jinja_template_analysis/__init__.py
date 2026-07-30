@@ -6,7 +6,7 @@ Jinja template analysis which returns what data a template needs, and what is wr
     report.diagnostics  # list[str] -> list of warnings
 """
 
-from .analysis import TemplateReport, analyze_jinja_template
+from .main import TemplateReport, analyze_jinja_template
 from .variable_tree import VariableNode
 
 __all__ = [
