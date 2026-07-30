@@ -1,5 +1,5 @@
-from .helpers import variables_for, warnings_for
 from ..utils.docxtpl_utils import normalize_docxtpl_prefixes
+from .helpers import variables_for, warnings_for
 
 
 def test_extracts_docxtpl_tr_loop_variable():

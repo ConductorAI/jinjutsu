@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jinja-template-analysis"
+version = "0.1.0"
+description = "Read a Jinja template and report the data it needs and what is wrong with it, in plain language"
+readme = "jinja/README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Jessica Shu", email = "jessica@conductorai.co" }]
+keywords = ["jinja", "jinja2", "template", "docxtpl", "linter", "static-analysis"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Text Processing :: Markup",
+]
+dependencies = ["jinja2>=3.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["jinja"]
+
+[tool.hatch.build.targets.sdist]
+include = ["jinja", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["jinja/tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
