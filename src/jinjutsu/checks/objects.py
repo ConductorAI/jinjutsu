@@ -6,8 +6,8 @@ Warnings:
 - '...' is a list and cannot be printed directly      {{ rows }} where the template also reads row.name
 """
 
+from ..types import VariableNode, WalkResult
 from ..utils.string_utils import warning_to_string
-from ..variable_tree import VariableNode, WalkResult
 
 
 def check_no_objects_printed_directly(walked: WalkResult) -> list[str]:

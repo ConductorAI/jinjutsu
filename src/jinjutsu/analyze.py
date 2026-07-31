@@ -3,9 +3,8 @@ The one way in: hand it template text, get back what the template needs and what
 
 Everything else in this package is an internal step
 Parsing happens once here, then variable_tree.py walks the result and checks/ inspects the text
+The shapes both halves return are defined in types.py
 """
-
-from typing import NamedTuple
 
 from jinja2 import Environment, TemplateAssertionError, TemplateSyntaxError, meta, nodes
 
@@ -14,16 +13,12 @@ from .checks.delimiters import check_malformed_tags, check_misplaced_statement_d
 from .checks.names import check_builtin_method_attributes, check_hyphenated_variables
 from .checks.objects import check_no_objects_printed_directly
 from .checks.parser import check_jinja_syntax, should_defer_to_tag_counts
+from .types import TemplateReport, VariableNode
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
 from .utils.tag_utils import TemplateText, read_template
-from .variable_tree import VariableNode, VariableTreeVisitor
+from .variable_tree import VariableTreeVisitor
 
 JINJA_ENV = Environment()
-
-
-class TemplateReport(NamedTuple):
-    variables: dict[str, VariableNode]  # the variable tree described in README.md, empty when the template won't parse
-    diagnostics: list[str]  # every problem found, in the order a reader should see them
 
 
 def analyze_jinja_template(template_text: str) -> TemplateReport:

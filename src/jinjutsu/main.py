@@ -11,11 +11,10 @@ import sys
 from pathlib import Path
 
 from .analyze import analyze_jinja_template
-from .variable_tree import VariableNode
+from .types import VariableNode
 
 NAME_COLUMN = 20  # Wide enough for most names
 INLINE_LABEL = "<string>"  # Stands in for the filename when the template came from the command line
-# Every delimiter this tool knows about, including the broken halves, so malformed text still reads as a template
 TEMPLATE_MARKERS = ("{{", "}}", "{%", "%}", "{#", "#}")
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,9 +37,6 @@ def main(argv: list[str] | None = None) -> int:
             _print_text(result, show_filename=len(results) > 1)
 
     return 1 if any(result["diagnostics"] for result in results) else 0
-
-if __name__ == "__main__":
-    sys.exit(main())
 
 
 def _render_tree(variables: dict[str, VariableNode]) -> list[str]:
@@ -115,3 +111,7 @@ def _print_text(result: dict, *, show_filename: bool) -> None:
         print("\n".join(_render_tree(result["variables"])))
     elif not result["diagnostics"]:
         print("No variables and nothing wrong")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

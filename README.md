@@ -332,8 +332,9 @@ Each `checks/` module is named for **what is wrong**, not for what it reads.
 
 | file                    |                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------- |
-| `analysis.py`           | `analyze_jinja_template()` and `TemplateReport` — the entry point, and which warnings survive |
-| `variable_tree.py`      | `VariableNode` and `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
+| `types.py`              | `VariableNode`, `TemplateReport`, and every other shape the modules pass around — imports nothing from the package, so it can be imported anywhere |
+| `analyze.py`            | `analyze_jinja_template()` — the entry point, and which warnings survive               |
+| `variable_tree.py`      | `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
 | `checks/delimiters.py`  | the braces are malformed, so Jinja never sees a tag at all                            |
 | `checks/names.py`       | a name inside a tag will not resolve the way it is written                            |
 | `checks/blocks.py`      | block structure is wrong — counts do not match, or a tag needs an enclosing loop      |

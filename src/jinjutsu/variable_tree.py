@@ -1,50 +1,18 @@
 """
-Model the shape of every variable a template uses, and build it from the jinja AST
-
-A VariableNode is an object, a list, a string or a boolean
-Objects and lists hold children under `properties`, and a list's `properties` describes one element
+Build the variable tree from the jinja AST
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from enum import Enum, auto
-from typing import Literal, NamedTuple, TypedDict
 
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
 
+from .types import PrintedPath, VariableNode, WalkResult
 from .utils.ast_utils import NamePathSegment, jinja_local_variables, split_ast_object_path, strip_list_operations
 from .utils.string_utils import warning_to_string
-
-
-class VariableNodeBase(TypedDict):
-    type: Literal["string", "boolean", "list", "object"]
-
-
-class VariableNode(VariableNodeBase, total=False):
-    item_format: Literal["string", "object"]
-    properties: dict[str, VariableNode]
-
-
-class PrintedPath(NamedTuple):
-    """
-    A variable printed with {{ }}, split into its root name and the fields read off it
-
-    {{ case.header.title }} on line 4  ->  PrintedPath(4, "case", ["header", "title"])
-    {{ amount }} on line 1             ->  PrintedPath(1, "amount", [])
-    """
-
-    line_no: int
-    root: str
-    attrs: list[str]
-
-
-class WalkResult(NamedTuple):
-    root: dict[str, VariableNode]  # the variable tree
-    warnings: list[str]  # a name the template uses as both a value and an object
-    conflict_paths: set[str]  # the paths behind those warnings, so a later check doesn't double up
-    printed: list[PrintedPath]  # bare {{ x }} prints, judged once the tree is finished
 
 
 class LeafUse(Enum):
