@@ -50,6 +50,46 @@ def test_several_templates_are_labelled_by_filename(tmp_path, capsys):
     assert "== " + second in out
 
 
+def test_template_text_is_analyzed_in_place_of_a_filename(capsys):
+    assert main(["hi {{ variable + 1 }}"]) == 0
+
+    assert capsys.readouterr().out.startswith("variable")
+
+
+def test_template_text_reports_its_problems_too(capsys):
+    assert main(["{{ store.items }}"]) == 1
+
+    assert "built-in method" in capsys.readouterr().out
+
+
+def test_malformed_template_text_is_still_recognized_as_a_template(capsys):
+    assert main(["{ % if alpha %}gated{% endif %}"]) == 1
+
+    assert "Extra space after" in capsys.readouterr().out
+
+
+def test_template_text_is_labelled_as_a_string_not_a_path(capsys):
+    main(["{{ a }}", "--json"])
+
+    assert json.loads(capsys.readouterr().out)[0]["file"] == "<string>"
+
+
+def test_a_file_wins_over_template_text_when_both_could_match(tmp_path, capsys):
+    path = write(tmp_path, "{{ from_the_file }}", "{{ odd_name }}.jinja")
+
+    main([path, "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["file"] == path
+    assert list(payload[0]["variables"]) == ["from_the_file"]
+
+
+def test_an_argument_that_is_neither_a_file_nor_a_template_still_exits_two(capsys):
+    assert main(["not-a-template.jinja"]) == 2
+
+    assert "cannot read" in capsys.readouterr().err
+
+
 def test_a_missing_file_exits_two_without_analyzing(tmp_path, capsys):
     assert main([str(tmp_path / "nope.jinja")]) == 2
 

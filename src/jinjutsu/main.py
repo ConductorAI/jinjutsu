@@ -1,5 +1,5 @@
 """
-Command line entry point: jinjutsu template.jinja
+Command line entry point: jinjutsu template.jinja, or jinjutsu "{{ inline.text }}"
 
 Prints what is wrong with the template first, then the variable tree in the shape README.md documents
 Exits 1 when a template has diagnostics, so the command works as a check in CI or a pre-commit hook
@@ -14,17 +14,20 @@ from .analyze import analyze_jinja_template
 from .variable_tree import VariableNode
 
 NAME_COLUMN = 20  # Wide enough for most names
+INLINE_LABEL = "<string>"  # Stands in for the filename when the template came from the command line
+# Every delimiter this tool knows about, including the broken halves, so malformed text still reads as a template
+TEMPLATE_MARKERS = ("{{", "}}", "{%", "%}", "{#", "#}")
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    paths = [Path(template) for template in args.templates]
+    sources = [(template, _read(template)) for template in args.templates]
 
-    if missing := [path for path in paths if not path.is_file()]:
-        for path in missing:
-            print(f"jinjutsu: cannot read {path}", file=sys.stderr)
+    if missing := [template for template, source in sources if source is None]:
+        for template in missing:
+            print(f"jinjutsu: cannot read {template}", file=sys.stderr)
         return 2
 
-    results = [_analyze(path) for path in paths]
+    results = [_analyze(label, text) for _, (label, text) in sources]
 
     if args.json:
         print(json.dumps(results, indent=2))
@@ -75,15 +78,30 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="jinjutsu",
         description="Report what data a Jinja template needs and what is wrong with it",
     )
-    parser.add_argument("templates", nargs="+", metavar="TEMPLATE", help="template files to analyze")
+    parser.add_argument(
+        "templates",
+        nargs="+",
+        metavar="TEMPLATE",
+        help="template files to analyze, or template text itself",
+    )
     parser.add_argument("--json", action="store_true", help="emit machine readable output instead of text")
     return parser
 
 
-def _analyze(path: Path) -> dict:
-    # Word writes a BOM often enough that utf-8-sig is the safer read for the templates this targets
-    report = analyze_jinja_template(path.read_text(encoding="utf-8-sig"))
-    return {"file": str(path), "variables": report.variables, "diagnostics": report.diagnostics}
+def _read(template: str) -> tuple[str, str] | None:
+    """Label and text for one argument, or None when it names neither a file nor anything template shaped"""
+    path = Path(template)
+    if path.is_file():  # Swallows the OSError a whole template passed as a path would otherwise raise
+        # Word writes a BOM often enough that utf-8-sig is the safer read for the templates this targets
+        return str(path), path.read_text(encoding="utf-8-sig")
+    if any(marker in template for marker in TEMPLATE_MARKERS):
+        return INLINE_LABEL, template
+    return None
+
+
+def _analyze(label: str, text: str) -> dict:
+    report = analyze_jinja_template(text)
+    return {"file": label, "variables": report.variables, "diagnostics": report.diagnostics}
 
 
 def _print_text(result: dict, *, show_filename: bool) -> None:
