@@ -1,4 +1,4 @@
-from jinjutsu import BooleanNode, ListNode, ObjectNode, StringNode
+from jinjutsu.types import BooleanNode, ListNode, ObjectNode, StringNode
 
 from .helpers import variables_for
 

@@ -1,4 +1,4 @@
-from jinjutsu import ListNode, ObjectNode, StringNode
+from jinjutsu.types import ListNode, ObjectNode, StringNode
 from jinjutsu.utils.docxtpl_utils import normalize_docxtpl_prefixes
 
 from .helpers import variables_for, warnings_for

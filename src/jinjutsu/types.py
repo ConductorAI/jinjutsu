@@ -5,33 +5,40 @@ from typing import Literal, NamedTuple
 
 
 @dataclass
-class UnknownNode:
+class _Node:
+    # A name only ever tested for truthiness renders fine when absent, so it is optional in the schema
+    # Out of __eq__ because it says how a name is used, not what shape it has
+    guard_only: bool = field(default=False, compare=False)
+
+
+@dataclass
+class UnknownNode(_Node):
     kind: Literal["unknown"] = "unknown"
 
 
 @dataclass
-class StringNode:
+class StringNode(_Node):
     kind: Literal["string"] = "string"
 
 
 @dataclass
-class BooleanNode:
+class BooleanNode(_Node):
     kind: Literal["boolean"] = "boolean"
 
 
 @dataclass
-class NumberNode:
+class NumberNode(_Node):
     kind: Literal["number"] = "number"
 
 
 @dataclass
-class ObjectNode:
+class ObjectNode(_Node):
     kind: Literal["object"] = "object"
     properties: dict[str, VariableNode] = field(default_factory=dict)
 
 
 @dataclass
-class ListNode:
+class ListNode(_Node):
     kind: Literal["list"] = "list"
     items: VariableNode = field(default_factory=UnknownNode)
 
@@ -51,7 +58,7 @@ def child_properties(node: VariableNode) -> dict[str, VariableNode]:
 
 
 class TemplateReport(NamedTuple):
-    variables: dict[str, VariableNode]  # the variable tree described in README.md, empty when the template won't parse
+    schema: dict  # JSON Schema for the context the template needs, with no properties when it won't parse
     diagnostics: list[str]  # every problem found, in the order a reader should see them
 
 

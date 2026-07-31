@@ -104,7 +104,7 @@ from jinjutsu import analyze_jinja_template
 
 report = analyze_jinja_template(template_text)
 
-report.variables    # dict[str, VariableNode] — each name and its inferred shape
+report.schema       # dict — JSON Schema for the context the template expects
 report.diagnostics  # list[str] — formatted strings, ready to show the user
 ```
 
@@ -112,9 +112,9 @@ report.diagnostics  # list[str] — formatted strings, ready to show the user
 `variable_tree.py` and the text checks in `checks/`. It never raises for a malformed template — a
 parse failure comes back as a diagnostic.
 
-## The variable tree
+## The schema
 
-`report.variables` maps each top-level name to a `VariableNode`. Given:
+`report.schema` is a JSON Schema for the context object the template expects. Given:
 
 ```jinja
 {{ case.header.title }}
@@ -122,35 +122,53 @@ parse failure comes back as a diagnostic.
 {% if case.sealed %}SEALED{% endif %}
 ```
 
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "case": {
+      "type": "object",
+      "properties": {
+        "header": {"type": "object", "properties": {"title": {"type": "string"}}},
+        "sections": {
+          "type": "array",
+          "items": {"type": "object", "properties": {"name": {"type": "string"}}}
+        },
+        "sealed": {"type": "boolean"}
+      }
+    }
+  }
+}
 ```
-case                object           -> {"header": ..., "sections": [...], "sealed": true}
-|-- header          object           -> {"title": "..."}
+
+The CLI prints the same thing as a tree:
+
+```
+case                object
+|-- header          object
 |   `-- title       string
-|-- sections        list of objects  -> [{"name": "..."}, {"name": "..."}]
+|-- sections        list of objects
 |   `-- name        string              a field on each section, not on the list
 `-- sealed          boolean
 ```
 
-A `VariableNode` is a tagged union, discriminated on `kind`:
+Three things are worth knowing:
 
-| node          | `kind`      | children                                    |
-| ------------- | ----------- | ------------------------------------------- |
-| `ObjectNode`  | `object`    | `properties: dict[str, VariableNode]`       |
-| `ListNode`    | `list`      | `items: VariableNode` — one element         |
-| `StringNode`  | `string`    | leaf                                        |
-| `BooleanNode` | `boolean`   | leaf                                        |
-| `NumberNode`  | `number`    | leaf — declared, nothing infers it yet      |
-| `UnknownNode` | `unknown`   | leaf — the name is required, its shape is not evidenced |
+- **A list describes its element under `items`.** `sections.items` is the shape of one section, so
+  `sections.items.properties.name` says every section has a name, never that the list itself has one.
+  A loop is what puts it there: `{% for s in sections %}` binds `s` to the element of `sections`, so
+  `{{ s.name }}` writes `name` into that element. Nested lists nest their `items`, so `{{ m[0][1] }}`
+  gives `array` of `array` of `string`.
+- **`required` is never emitted, so every field is optional.** See the limitation below — the schema
+  describes shapes, not obligations. Top-level properties are sorted, which keeps the output stable
+  enough to commit and diff.
+- **`additionalProperties` is not set.** A real context usually carries more than one template reads,
+  and rejecting that would make the schema useless for validating the data you already have.
 
-Objects and lists are the interior nodes. Two things are worth knowing:
-
-- **A list describes its element through `items`, not through its own fields.** `sections.items` is
-  the shape of one section, so `sections.items.properties.name` says every section has a name, never
-  that the list itself has one. A loop is what puts it there: `{% for s in sections %}` binds `s` to
-  the element slot of `sections`, so `{{ s.name }}` writes `name` into that element.
-- **`unknown` is not a failure.** It means Jinja requires the name but nothing in the template says
-  what shape it takes — `{% for x in xs %}` with `x` never used leaves `xs.items` unknown. Guessing
-  `string` there, which an earlier version did, reads as evidence that was never gathered.
+Internally the walk builds a tagged union of node dataclasses — `ObjectNode`, `ListNode`,
+`StringNode`, `BooleanNode`, `NumberNode`, `UnknownNode`, discriminated on `kind`. That model is an
+implementation detail of `types.py` and is not exported; `schema.py` is the only thing that reads it.
 
 ### How types are decided
 
@@ -167,7 +185,7 @@ Objects and lists are the interior nodes. Two things are worth knowing:
 | `{{ xs[0].a }}`, `{{ xs.0.a }}`             | `xs`: list of objects                           |
 | `{{ m[0][1] }}`                             | `m`: list of lists of strings                   |
 | `{% for f in fs %}{% if f %}{% endif %}{% endfor %}` | `fs`: list of booleans                 |
-| `{% for x in xs %}body{% endfor %}`         | `xs`: list, element `unknown` — nothing reads it |
+| `{% for x in xs %}body{% endfor %}`         | `xs`: list of strings — nothing reads the element |
 | `{{ r['items'] }}`                          | `r`: object with an `items` field, not an index  |
 
 Names the template invents are never reported, since nobody supplies them: loop targets,
@@ -283,15 +301,14 @@ it does not discover anything.
 | - | ---------------------------------------------- | ----------------------------------------------- | ---------------------------------------- | ------------------------------- | ---------------------------- |
 | 1 | `find_tags` line numbering                     | O(M × N)                                        | M tags, N bytes                          | n^1.01 tags, n^0.96 bytes       | n^1.96  (N = 200 M)          |
 | 2 | `warning_to_string(source_line=)`              | O(W × L)                                        | W warnings, L embedded line length       | n^1.03 warnings, n^0.17 length  | n^1.14 → 1.58, still climbing (1:1) |
-| 3 | `VariableTreeVisitor._guarded`                 | O(G × U)                                        | G guards `{% if x %}`, U uses `{{ a.b }}`| n^0.82 guards, n^0.81 uses      | n^1.71 → 1.90, approaching 2 (1:1) |
-| 4 | `replace_comments_with_spaces`                 | O(C × N)                                        | C unclosed `{#`, N bytes                 | n^1.01 opens, n^1.02 bytes      | n^2.02  (N = 500 C)          |
-| 5 | `check_malformed_tags` regexes                 | O(D × L)                                        | D unclosed delimiters, L line length     | n^0.96 opens, n^0.98 length     | n^1.94  (L = 50 D)           |
-| 6 | `meta.find_undeclared_variables` (Jinja's own) | O(B²)                                           | B sibling `{% if %}` blocks — **one axis only** | n^1.88 → 2.04             | n/a                          |
+| 3 | `replace_comments_with_spaces`                 | O(C × N)                                        | C unclosed `{#`, N bytes                 | n^1.01 opens, n^1.02 bytes      | n^2.02  (N = 500 C)          |
+| 4 | `check_malformed_tags` regexes                 | O(D × L)                                        | D unclosed delimiters, L line length     | n^0.96 opens, n^0.98 length     | n^1.94  (L = 50 D)           |
+| 5 | `meta.find_undeclared_variables` (Jinja's own) | O(B²)                                           | B sibling `{% if %}` blocks — **one axis only** | n^1.88 → 2.04             | n/a                          |
 
-Rows 1–5 each need *thousands* of tags, unclosed `{#`, or unclosed delimiters in a single document
+Rows 1–4 each need *thousands* of tags, unclosed `{#`, or unclosed delimiters in a single document
 before they cost anything.
 
-Row 6 is the only genuinely quadratic one, and it is inside Jinja rather than in this package.
+Row 5 is the only genuinely quadratic one, and it is inside Jinja rather than in this package.
 `meta.find_undeclared_variables` is quadratic in the number of sibling `{% if %}` blocks: the local
 slope climbs 1.88 → 1.90 → 1.96 → 2.04, and a control run with the same node count and no `{% if %}`
 blocks is exactly linear (n^1.00 over the same range), which pins the cause to the blocks rather than
@@ -312,6 +329,20 @@ what decides which names a template actually requires.
 
 ## Known limitations
 
+- **Nothing is marked required, on purpose.** Whether a name may be absent is a property of each
+  *place* it is used, not of the name: `{{ name | default("x") }}{{ name }}` is optional at one site
+  and mandatory at the other, and a single flag per name cannot say both. It also depends on the
+  renderer — under `StrictUndefined` even `{% if v %}` raises, so nothing is ever safely absent.
+  Until usage sites are modelled the schema omits `required`, which in JSON Schema means no
+  obligations rather than an empty set of them. The walk does track which leaves were only ever
+  guarded; it feeds conflict suppression, not the schema.
+- **Optionality idioms are not read.** `{{ name | default("friend") }}`, `{% if name is defined %}`
+  and `{{ name or "friend" }}` all parse and yield the right *shape*, but the filter or test wrapper
+  is traversed through to reach the name beneath it, so the intent behind it is lost — the same
+  mechanism as the arithmetic gap below.
+- **An unevidenced shape is reported as `string`.** A name jinja requires that the walk never shaped
+  serializes as `{"type": "string"}`, which is a default rather than a finding. Validating a context
+  that supplies a number there fails against a claim the template never made.
 - **Arithmetic and filters do not inform the type.** `{{ v + 1 }}`, `{{ v * 2 }}`, `{{ v | int }}` and
   `{% if v > 5 %}` all report `v` as a string. The operator node is traversed through to reach the
   name beneath it, and nothing carries down what it was reached through. `NumberNode` exists in the
@@ -344,7 +375,8 @@ Each `checks/` module is named for **what is wrong**, not for what it reads.
 
 | file                    |                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------- |
-| `types.py`              | the `VariableNode` union, `TemplateReport`, and every other shape the modules pass around — imports nothing from the package, so it can be imported anywhere |
+| `types.py`              | the internal `VariableNode` union, `TemplateReport`, and every other shape the modules pass around — imports nothing from the package, so it can be imported anywhere |
+| `schema.py`             | the node union rendered as JSON Schema — the only reader of the internal model         |
 | `analyze.py`            | `analyze_jinja_template()` — the entry point, and which warnings survive               |
 | `variable_tree.py`      | `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
 | `checks/delimiters.py`  | the braces are malformed, so Jinja never sees a tag at all                            |

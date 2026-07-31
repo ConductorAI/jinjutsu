@@ -68,8 +68,6 @@ class VariableTreeVisitor(NodeVisitor):
         # So record the bare print while we can still see it, and let
         # check_no_objects_printed_directly decide once the tree is finished
         self._printed_paths: list[PrintedPath] = []
-        # Leaves seen only as a truthiness guard, which says nothing about their shape
-        self._guarded: list[VariableNode] = []
         self._lineno = 0
 
     def walk(self, ast: nodes.Template) -> WalkResult:
@@ -230,7 +228,8 @@ class VariableTreeVisitor(NodeVisitor):
         existing = _slot_get(slot)
         if isinstance(existing, ListNode):
             return existing
-        node = ListNode()
+        # {% if xs %}{% for x in xs %} refined a guard, so the list inherits the guard's optionality
+        node = ListNode(guard_only=_guard_only(existing))
         _slot_set(slot, node)
         return node
 
@@ -244,13 +243,13 @@ class VariableTreeVisitor(NodeVisitor):
         # An element has no name of its own to blame, so only a named slot can clash
         if not isinstance(slot, ListNode):
             self._record_container_conflict(existing, path, segment)
-        node = ObjectNode()
+        node = ObjectNode(guard_only=_guard_only(existing))
         _slot_set(slot, node)
         return node
 
     def _record_container_conflict(self, existing: VariableNode | None, path: str, segment: str) -> None:
         """Record a warning when a path already used as a plain value is now being read as an object"""
-        if any(leaf is existing for leaf in self._guarded):
+        if _guard_only(existing):
             # {% if section %}{{ section.title }}{% endif %} guards an optional object and isn't considered a clash
             return
         if not isinstance(existing, SCALAR_NODES):
@@ -272,14 +271,12 @@ class VariableTreeVisitor(NodeVisitor):
     def _set_leaf(self, slot: Slot, use: LeafUse) -> None:
         existing = _slot_get(slot)
         if existing is None or isinstance(existing, UnknownNode):
-            leaf: VariableNode = StringNode() if use is LeafUse.VALUE else BooleanNode()
+            leaf: VariableNode = StringNode() if use is LeafUse.VALUE else BooleanNode(guard_only=use is LeafUse.GUARD)
             _slot_set(slot, leaf)
-            if use is LeafUse.GUARD:
-                self._guarded.append(leaf)
             return
         if use is not LeafUse.GUARD:
-            # Any other use settles the type, so it can no longer change
-            self._guarded = [leaf for leaf in self._guarded if leaf is not existing]
+            # Any other use settles the type, and means the value has to be supplied after all
+            existing.guard_only = False
         if isinstance(existing, BooleanNode) and use is LeafUse.VALUE:
             _slot_set(slot, StringNode())
 
@@ -303,6 +300,10 @@ def _slot_set(slot: Slot, node: VariableNode) -> None:
     else:
         container, key = slot
         container[key] = node
+
+
+def _guard_only(node: VariableNode | None) -> bool:
+    return node is not None and node.guard_only
 
 
 def _discarded_slot(name: str) -> Slot:

@@ -13,6 +13,7 @@ from .checks.delimiters import check_malformed_tags, check_misplaced_statement_d
 from .checks.names import check_builtin_method_attributes, check_hyphenated_variables
 from .checks.objects import check_no_objects_printed_directly
 from .checks.parser import check_jinja_syntax, should_defer_to_tag_counts
+from .schema import context_schema
 from .types import TemplateReport, UnknownNode, VariableNode
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
 from .utils.tag_utils import TemplateText, read_template
@@ -29,7 +30,7 @@ def analyze_jinja_template(template_text: str) -> TemplateReport:
         syntax_error = e
     validation_errors = _validate(read_template(template_text), syntax_error)
     variables, variable_conflict_errors = _build_variable_tree(jinja_ast)
-    return TemplateReport(variables, validation_errors + variable_conflict_errors)
+    return TemplateReport(context_schema(variables), validation_errors + variable_conflict_errors)
 
 
 def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[str]:

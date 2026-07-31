@@ -1,6 +1,6 @@
-from jinjutsu import BooleanNode, ListNode, StringNode, analyze_jinja_template
+from jinjutsu.types import BooleanNode, ListNode, StringNode
 
-from .helpers import conflicts_for, variables_for
+from .helpers import conflicts_for, schema_for, variables_for, warnings_for
 
 
 def test_loop_locals_and_set_targets_are_not_extracted():
@@ -61,7 +61,8 @@ def test_commented_out_variables_are_ignored():
 def test_unknown_filter_does_not_raise():
     text = "{{ amount | to_json }}"
 
-    assert analyze_jinja_template(text) == ({}, [])
+    assert schema_for(text)["properties"] == {}
+    assert warnings_for(text) == []
 
 
 def test_malformed_template_returns_empty_schema():
