@@ -90,6 +90,70 @@ def test_an_argument_that_is_neither_a_file_nor_a_template_still_exits_two(capsy
     assert "cannot read" in capsys.readouterr().err
 
 
+def test_warnings_only_omits_the_tree(tmp_path, capsys):
+    template = write(tmp_path, "{{ store.items }}")
+
+    assert main([template, "--warnings"]) == 1
+
+    out = capsys.readouterr().out
+    assert "built-in method" in out
+    assert "store               object" not in out
+
+
+def test_tree_only_omits_the_warnings(tmp_path, capsys):
+    template = write(tmp_path, "{{ store.items }}")
+
+    assert main([template, "--tree"]) == 1
+
+    out = capsys.readouterr().out
+    assert "store               object" in out
+    assert "built-in method" not in out
+
+
+def test_schema_prints_the_json_schema(tmp_path, capsys):
+    template = write(tmp_path, "{{ title }}")
+
+    assert main([template, "--schema"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["properties"] == {"title": {"type": "string"}}
+
+
+def test_all_prints_every_section(tmp_path, capsys):
+    template = write(tmp_path, "{{ store.items }}")
+
+    assert main([template, "--all"]) == 1
+
+    out = capsys.readouterr().out
+    assert "built-in method" in out
+    assert "store               object" in out
+    assert '"$schema"' in out
+
+
+def test_sections_compose(tmp_path, capsys):
+    template = write(tmp_path, "{{ store.items }}")
+
+    main([template, "--tree", "--schema"])
+
+    out = capsys.readouterr().out
+    assert "store               object" in out
+    assert '"$schema"' in out
+    assert "built-in method" not in out
+
+
+def test_the_empty_message_only_mentions_the_sections_asked_for(tmp_path, capsys):
+    template = write(tmp_path, "plain text")
+
+    main([template, "--warnings"])
+    assert capsys.readouterr().out == "Nothing wrong\n"
+
+    main([template, "--tree"])
+    assert capsys.readouterr().out == "No variables\n"
+
+    main([template])
+    assert capsys.readouterr().out == "No variables and nothing wrong\n"
+
+
 def test_a_missing_file_exits_two_without_analyzing(tmp_path, capsys):
     assert main([str(tmp_path / "nope.jinja")]) == 2
 

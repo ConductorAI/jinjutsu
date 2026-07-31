@@ -376,7 +376,8 @@ Each `checks/` module is named for **what is wrong**, not for what it reads.
 | file                    |                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------- |
 | `types.py`              | the internal `VariableNode` union, `TemplateReport`, and every other shape the modules pass around — imports nothing from the package, so it can be imported anywhere |
-| `schema.py`             | the node union rendered as JSON Schema — the only reader of the internal model         |
+| `schema.py`             | the node union rendered as JSON Schema, and that schema rendered as the CLI's tree — the only reader of the internal model |
+| `main.py`               | the CLI: which argument is a file and which is template text, and the exit code        |
 | `analyze.py`            | `analyze_jinja_template()` — the entry point, and which warnings survive               |
 | `variable_tree.py`      | `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
 | `checks/delimiters.py`  | the braces are malformed, so Jinja never sees a tag at all                            |
