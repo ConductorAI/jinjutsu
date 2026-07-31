@@ -115,7 +115,7 @@ parse failure comes back as a diagnostic.
 The same analysis is available as a command, with an exit code a CI job or a pre-commit hook can read:
 
 ```sh
-jinjutsu TEMPLATE [TEMPLATE ...] [--warnings] [--tree] [--schema] [--all] [--json]
+jinjutsu TEMPLATE [TEMPLATE ...] [--warnings] [--tree] [--schema] [--all]
 ```
 
 See [examples/cli](examples/cli) for what each flag prints.

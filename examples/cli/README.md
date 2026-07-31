@@ -72,29 +72,6 @@ $ jinjutsu examples/cli/client.jinja --schema
 All three sections in the order above, each behind its divider. The flags also compose, so
 `--warnings --schema` gives those two and no tree.
 
-## `--json`
-
-Show JSON schema only
-
-```sh
-$ jinjutsu examples/cli/client.jinja --json
-[
-  {
-    "file": "examples/cli/client.jinja",
-    "schema": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "type": "object",
-      "properties": {
-        "client": {"type": "object", "properties": {"items": {"type": "string"}}}
-      }
-    },
-    "diagnostics": [
-      "Line 1: Field 'items' collides with a built-in method\n  Found: {{ client.items }}\n  ..."
-    ]
-  }
-]
-```
-
 ## Several files
 
 ```sh

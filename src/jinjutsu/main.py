@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .analyze import analyze_jinja_template
 from .schema import render_tree
+from .types import TemplateReport
 
 INLINE_LABEL = "<string>"  # Stands in for the filename when the template came from the command line
 TEMPLATE_MARKERS = ("{{", "}}", "{%", "%}", "{#", "#}")
@@ -35,18 +36,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"jinjutsu: cannot read {template}", file=sys.stderr)
         return 2
 
-    results = [_analyze(label, text) for label, text in sources]
+    reports = [(label, analyze_jinja_template(text)) for label, text in sources]
+    sections = SECTIONS if args.all else tuple(s for s in SECTIONS if getattr(args, s)) or DEFAULT_SECTIONS
 
-    if args.json:
-        print(json.dumps(results, indent=2))
-    else:
-        sections = SECTIONS if args.all else tuple(s for s in SECTIONS if getattr(args, s)) or DEFAULT_SECTIONS
-        for index, result in enumerate(results):
-            if index:
-                print()
-            _print_text(result, sections, show_filename=len(results) > 1)
+    for index, (label, report) in enumerate(reports):
+        if index:
+            print()
+        _print_text(label, report, sections, show_filename=len(reports) > 1)
 
-    return 1 if any(result["diagnostics"] for result in results) else 0
+    return 1 if any(report.diagnostics for _, report in reports) else 0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -58,11 +56,6 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tree", action="store_true", help="print the data it needs as an indented tree")
     parser.add_argument("--schema", action="store_true", help="print the data it needs as a JSON Schema")
     parser.add_argument("--all", action="store_true", help="print all three sections")
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="emit one machine readable record per template, ignoring the section flags",
-    )
     return parser
 
 
@@ -77,30 +70,25 @@ def _read(template: str) -> tuple[str, str] | None:
     return None
 
 
-def _analyze(label: str, text: str) -> dict:
-    report = analyze_jinja_template(text)
-    return {"file": label, "schema": report.schema, "diagnostics": report.diagnostics}
-
-
-def _print_text(result: dict, sections: tuple[str, ...], *, show_filename: bool) -> None:
+def _print_text(label: str, report: TemplateReport, sections: tuple[str, ...], *, show_filename: bool) -> None:
     if show_filename:
-        print(f"== {result['file']}")
+        print(f"== {label}")
 
-    properties = result["schema"]["properties"]
+    properties = report.schema["properties"]
     blocks = []
-    if "warnings" in sections and result["diagnostics"]:
-        blocks.append(("warnings", "\n".join(result["diagnostics"])))
+    if "warnings" in sections and report.diagnostics:
+        blocks.append(("warnings", "\n".join(report.diagnostics)))
     if "tree" in sections and properties:
         blocks.append(("tree", "\n".join(render_tree(properties))))
     if "schema" in sections:
-        blocks.append(("schema", json.dumps(result["schema"], indent=2)))
+        blocks.append(("schema", json.dumps(report.schema, indent=2)))
 
     # Only label once there is more than one block, so a lone --schema still redirects to a valid file
     if len(blocks) > 1:
         print("\n\n".join(f"{f'===== {name} '.ljust(DIVIDER_WIDTH, '=')}\n{body}" for name, body in blocks))
     elif blocks:
         print(blocks[0][1])
-    elif not result["diagnostics"]:
+    elif not report.diagnostics:
         print(NOTHING_TO_SAY[sections])
 
 

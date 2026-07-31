@@ -28,17 +28,6 @@ def test_a_template_with_a_problem_exits_one_and_says_what_is_wrong(tmp_path, ca
     assert "built-in method" in capsys.readouterr().out
 
 
-def test_json_output_carries_the_schema_and_diagnostics(tmp_path, capsys):
-    template = write(tmp_path, "{{ store.items }}")
-
-    main([template, "--json"])
-
-    payload = json.loads(capsys.readouterr().out)
-    assert payload[0]["file"] == template
-    assert payload[0]["schema"]["properties"]["store"]["type"] == "object"
-    assert len(payload[0]["diagnostics"]) == 1
-
-
 def test_several_templates_are_labelled_by_filename(tmp_path, capsys):
     first = write(tmp_path, "{{ a }}", "first.jinja")
     second = write(tmp_path, "{{ b }}", "second.jinja")
@@ -69,19 +58,19 @@ def test_malformed_template_text_is_still_recognized_as_a_template(capsys):
 
 
 def test_template_text_is_labelled_as_a_string_not_a_path(capsys):
-    main(["{{ a }}", "--json"])
+    main(["{{ a }}", "{{ b }}"])
 
-    assert json.loads(capsys.readouterr().out)[0]["file"] == "<string>"
+    assert "== <string>" in capsys.readouterr().out
 
 
 def test_a_file_wins_over_template_text_when_both_could_match(tmp_path, capsys):
     path = write(tmp_path, "{{ from_the_file }}", "{{ odd_name }}.jinja")
 
-    main([path, "--json"])
+    main([path, "--tree"])
 
-    payload = json.loads(capsys.readouterr().out)
-    assert payload[0]["file"] == path
-    assert list(payload[0]["schema"]["properties"]) == ["from_the_file"]
+    out = capsys.readouterr().out
+    assert out.startswith("from_the_file")
+    assert "odd_name" not in out
 
 
 def test_an_argument_that_is_neither_a_file_nor_a_template_still_exits_two(capsys):
