@@ -7,10 +7,27 @@ Jinja template analysis which returns what data a template needs, and what is wr
 """
 
 from .analyze import analyze_jinja_template
-from .types import TemplateReport, VariableNode
+from .types import (
+    BooleanNode,
+    ListNode,
+    NumberNode,
+    ObjectNode,
+    StringNode,
+    TemplateReport,
+    UnknownNode,
+    VariableNode,
+    child_properties,
+)
 
 __all__ = [
+    "BooleanNode",
+    "ListNode",
+    "NumberNode",
+    "ObjectNode",
+    "StringNode",
     "TemplateReport",
+    "UnknownNode",
     "VariableNode",
     "analyze_jinja_template",
+    "child_properties",
 ]

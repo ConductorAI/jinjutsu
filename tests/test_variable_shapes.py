@@ -1,3 +1,5 @@
+from jinjutsu import ListNode, ObjectNode, StringNode, UnknownNode
+
 from .helpers import variables_for
 
 
@@ -6,11 +8,7 @@ def test_indexed_access_builds_list_of_objects():
 
     variables = variables_for(text)
 
-    assert variables["items"] == {
-        "type": "list",
-        "item_format": "object",
-        "properties": {"name": {"type": "string"}},
-    }
+    assert variables["items"] == ListNode(items=ObjectNode(properties={"name": StringNode()}))
 
 
 def test_dot_number_access_builds_list_of_objects():
@@ -18,11 +16,7 @@ def test_dot_number_access_builds_list_of_objects():
 
     variables = variables_for(text)
 
-    assert variables["items"] == {
-        "type": "list",
-        "item_format": "object",
-        "properties": {"name": {"type": "string"}},
-    }
+    assert variables["items"] == ListNode(items=ObjectNode(properties={"name": StringNode()}))
 
 
 def test_bare_indexed_access_is_list_of_strings():
@@ -30,7 +24,7 @@ def test_bare_indexed_access_is_list_of_strings():
 
     variables = variables_for(text)
 
-    assert variables["items"] == {"type": "list", "item_format": "string"}
+    assert variables["items"] == ListNode(items=StringNode())
 
 
 def test_indexed_access_nested_under_object():
@@ -38,12 +32,33 @@ def test_indexed_access_nested_under_object():
 
     variables = variables_for(text)
 
-    assert variables["a"] == {
-        "type": "object",
-        "properties": {
-            "b": {"type": "list", "item_format": "object", "properties": {"c": {"type": "string"}}},
-        },
-    }
+    assert variables["a"] == ObjectNode(
+        properties={"b": ListNode(items=ObjectNode(properties={"c": StringNode()}))},
+    )
+
+
+def test_repeated_subscript_builds_a_list_of_lists():
+    text = "{{ matrix[0][1] }}"
+
+    variables = variables_for(text)
+
+    assert variables["matrix"] == ListNode(items=ListNode(items=StringNode()))
+
+
+def test_nested_loop_over_the_loop_target_builds_a_list_of_lists():
+    text = "{% for row in grid %}{% for cell in row %}{{ cell }}{% endfor %}{% endfor %}"
+
+    variables = variables_for(text)
+
+    assert variables["grid"] == ListNode(items=ListNode(items=StringNode()))
+
+
+def test_loop_target_never_used_leaves_its_element_unknown():
+    text = "{% for x in xs %}body{% endfor %}"
+
+    variables = variables_for(text)
+
+    assert variables["xs"] == ListNode(items=UnknownNode())
 
 
 def test_string_subscript_is_a_property_not_an_index():
@@ -51,7 +66,7 @@ def test_string_subscript_is_a_property_not_an_index():
 
     variables = variables_for(text)
 
-    assert variables["r"] == {"type": "object", "properties": {"items": {"type": "string"}}}
+    assert variables["r"] == ObjectNode(properties={"items": StringNode()})
 
 
 def test_string_subscript_is_never_mistaken_for_an_index_marker():
@@ -59,7 +74,7 @@ def test_string_subscript_is_never_mistaken_for_an_index_marker():
 
     variables = variables_for(text)
 
-    assert variables["r"] == {"type": "object", "properties": {"[]": {"type": "string"}}}
+    assert variables["r"] == ObjectNode(properties={"[]": StringNode()})
 
 
 def test_indexed_access_merges_with_loop_over_same_list():
@@ -67,11 +82,9 @@ def test_indexed_access_merges_with_loop_over_same_list():
 
     variables = variables_for(text)
 
-    assert variables["items"] == {
-        "type": "list",
-        "item_format": "object",
-        "properties": {"name": {"type": "string"}, "other": {"type": "string"}},
-    }
+    assert variables["items"] == ListNode(
+        items=ObjectNode(properties={"name": StringNode(), "other": StringNode()}),
+    )
 
 
 def test_dynamic_subscript_is_not_resolved():
@@ -80,7 +93,7 @@ def test_dynamic_subscript_is_not_resolved():
     variables = variables_for(text)
 
     assert set(variables) == {"items", "i"}
-    assert variables["items"] == {"type": "string"}
+    assert variables["items"] == StringNode()
 
 
 def test_top_level_object_access_builds_nested_object():
@@ -88,12 +101,9 @@ def test_top_level_object_access_builds_nested_object():
 
     variables = variables_for(text)
 
-    assert variables["section"] == {
-        "type": "object",
-        "properties": {
-            "header": {"type": "object", "properties": {"title": {"type": "string"}}},
-        },
-    }
+    assert variables["section"] == ObjectNode(
+        properties={"header": ObjectNode(properties={"title": StringNode()})},
+    )
 
 
 def test_nested_loops_build_nested_list_of_objects():
@@ -101,18 +111,14 @@ def test_nested_loops_build_nested_list_of_objects():
 
     variables = variables_for(text)
 
-    assert variables["sections"] == {
-        "type": "list",
-        "item_format": "object",
-        "properties": {
-            "title": {"type": "string"},
-            "authorized": {
-                "type": "list",
-                "item_format": "object",
-                "properties": {"name": {"type": "string"}},
+    assert variables["sections"] == ListNode(
+        items=ObjectNode(
+            properties={
+                "title": StringNode(),
+                "authorized": ListNode(items=ObjectNode(properties={"name": StringNode()})),
             },
-        },
-    }
+        ),
+    )
 
 
 def test_filtered_iterable_is_still_a_list():
@@ -120,11 +126,7 @@ def test_filtered_iterable_is_still_a_list():
 
     variables = variables_for(text)
 
-    assert variables["items"] == {
-        "type": "list",
-        "item_format": "object",
-        "properties": {"name": {"type": "string"}},
-    }
+    assert variables["items"] == ListNode(items=ObjectNode(properties={"name": StringNode()}))
 
 
 def test_filter_arguments_are_still_extracted():
@@ -132,8 +134,8 @@ def test_filter_arguments_are_still_extracted():
 
     variables = variables_for(text)
 
-    assert variables["rows"]["type"] == "list"
-    assert variables["columns"] == {"type": "string"}
+    assert isinstance(variables["rows"], ListNode)
+    assert variables["columns"] == UnknownNode()
 
 
 def test_bare_loop_item_is_list_of_strings():
@@ -141,7 +143,7 @@ def test_bare_loop_item_is_list_of_strings():
 
     variables = variables_for(text)
 
-    assert variables["countries"] == {"type": "list", "item_format": "string"}
+    assert variables["countries"] == ListNode(items=StringNode())
 
 
 def test_non_name_iterable_extracts_argument_not_loop_local():
@@ -150,7 +152,7 @@ def test_non_name_iterable_extracts_argument_not_loop_local():
     variables = variables_for(text)
 
     assert set(variables) == {"count"}
-    assert variables["count"] == {"type": "string"}
+    assert variables["count"] == StringNode()
 
 
 def test_plain_for_loop_still_extracted():
@@ -173,4 +175,4 @@ def test_empty_string_key_is_kept_as_a_field():
     # '' is a real key, so it must not be read as "no key left to place"
     text = "{{ r[''] }}"
 
-    assert variables_for(text) == {"r": {"type": "object", "properties": {"": {"type": "string"}}}}
+    assert variables_for(text) == {"r": ObjectNode(properties={"": StringNode()})}

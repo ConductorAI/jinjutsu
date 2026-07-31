@@ -131,18 +131,26 @@ case                object           -> {"header": ..., "sections": [...], "seal
 `-- sealed          boolean
 ```
 
-Objects and lists are interior nodes; strings and booleans are leaves.
+A `VariableNode` is a tagged union, discriminated on `kind`:
 
-Two parts of the shape are easy to misread:
+| node          | `kind`      | children                                    |
+| ------------- | ----------- | ------------------------------------------- |
+| `ObjectNode`  | `object`    | `properties: dict[str, VariableNode]`       |
+| `ListNode`    | `list`      | `items: VariableNode` — one element         |
+| `StringNode`  | `string`    | leaf                                        |
+| `BooleanNode` | `boolean`   | leaf                                        |
+| `NumberNode`  | `number`    | leaf — declared, nothing infers it yet      |
+| `UnknownNode` | `unknown`   | leaf — the name is required, its shape is not evidenced |
 
-- **`properties` means something different on an object than on a list.** On an object it holds that
-  object's own fields. On a list it holds the fields of *one element*, so `sections.properties.name`
-  says every section has a name, never that the list itself has one. A loop is what puts it there:
-  `{% for s in sections %}` binds `s` to the `sections` node, so `{{ s.name }}` writes `name` into
-  that node's properties.
-- **`item_format` says what one element of a list looks like.** It is filled in after the walk,
-  derived from whether the list ended up with properties, so it carries nothing the tree does not
-  already say. It saves callers from walking the tree to answer the same question.
+Objects and lists are the interior nodes. Two things are worth knowing:
+
+- **A list describes its element through `items`, not through its own fields.** `sections.items` is
+  the shape of one section, so `sections.items.properties.name` says every section has a name, never
+  that the list itself has one. A loop is what puts it there: `{% for s in sections %}` binds `s` to
+  the element slot of `sections`, so `{{ s.name }}` writes `name` into that element.
+- **`unknown` is not a failure.** It means Jinja requires the name but nothing in the template says
+  what shape it takes — `{% for x in xs %}` with `x` never used leaves `xs.items` unknown. Guessing
+  `string` there, which an earlier version did, reads as evidence that was never gathered.
 
 ### How types are decided
 
@@ -157,6 +165,9 @@ Two parts of the shape are easy to misread:
 | `{% for s in xs %}{{ s }}{% endfor %}`      | `xs`: list of strings                           |
 | `{% for s in xs %}{{ s.a }}{% endfor %}`    | `xs`: list of objects                           |
 | `{{ xs[0].a }}`, `{{ xs.0.a }}`             | `xs`: list of objects                           |
+| `{{ m[0][1] }}`                             | `m`: list of lists of strings                   |
+| `{% for f in fs %}{% if f %}{% endif %}{% endfor %}` | `fs`: list of booleans                 |
+| `{% for x in xs %}body{% endfor %}`         | `xs`: list, element `unknown` — nothing reads it |
 | `{{ r['items'] }}`                          | `r`: object with an `items` field, not an index  |
 
 Names the template invents are never reported, since nobody supplies them: loop targets,
@@ -301,9 +312,10 @@ what decides which names a template actually requires.
 
 ## Known limitations
 
-- **A 2D list is flattened.** `matrix[0][1]` has nowhere to go, because `item_format` is a flat enum
-  rather than a recursive child. To express a grid, nest loops instead:
-  `{% for row in table %}{% for cell in row.cells %}{{ cell }}{% endfor %}{% endfor %}`.
+- **Arithmetic and filters do not inform the type.** `{{ v + 1 }}`, `{{ v * 2 }}`, `{{ v | int }}` and
+  `{% if v > 5 %}` all report `v` as a string. The operator node is traversed through to reach the
+  name beneath it, and nothing carries down what it was reached through. `NumberNode` exists in the
+  model for this, and nothing produces it yet.
 - **`{{ total-discount }}` warns even though it is valid subtraction**, because it is far more often
   a name someone meant to write with an underscore. Writing `{{ total - discount }}` clears it.
 - **An unknown filter reports no variables.** Asking Jinja for the names compiles the template, so
@@ -332,7 +344,7 @@ Each `checks/` module is named for **what is wrong**, not for what it reads.
 
 | file                    |                                                                                       |
 | ----------------------- | ------------------------------------------------------------------------------------- |
-| `types.py`              | `VariableNode`, `TemplateReport`, and every other shape the modules pass around — imports nothing from the package, so it can be imported anywhere |
+| `types.py`              | the `VariableNode` union, `TemplateReport`, and every other shape the modules pass around — imports nothing from the package, so it can be imported anywhere |
 | `analyze.py`            | `analyze_jinja_template()` — the entry point, and which warnings survive               |
 | `variable_tree.py`      | `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
 | `checks/delimiters.py`  | the braces are malformed, so Jinja never sees a tag at all                            |

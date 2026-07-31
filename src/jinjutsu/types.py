@@ -1,15 +1,53 @@
 from __future__ import annotations
 
-from typing import Literal, NamedTuple, TypedDict
+from dataclasses import dataclass, field
+from typing import Literal, NamedTuple
 
 
-class VariableNodeBase(TypedDict):
-    type: Literal["string", "boolean", "list", "object"]
+@dataclass
+class UnknownNode:
+    kind: Literal["unknown"] = "unknown"
 
 
-class VariableNode(VariableNodeBase, total=False):
-    item_format: Literal["string", "object"]
-    properties: dict[str, VariableNode]
+@dataclass
+class StringNode:
+    kind: Literal["string"] = "string"
+
+
+@dataclass
+class BooleanNode:
+    kind: Literal["boolean"] = "boolean"
+
+
+@dataclass
+class NumberNode:
+    kind: Literal["number"] = "number"
+
+
+@dataclass
+class ObjectNode:
+    kind: Literal["object"] = "object"
+    properties: dict[str, VariableNode] = field(default_factory=dict)
+
+
+@dataclass
+class ListNode:
+    kind: Literal["list"] = "list"
+    items: VariableNode = field(default_factory=UnknownNode)
+
+
+VariableNode = UnknownNode | StringNode | BooleanNode | NumberNode | ObjectNode | ListNode
+
+SCALAR_NODES = (StringNode, BooleanNode, NumberNode)
+
+
+def child_properties(node: VariableNode) -> dict[str, VariableNode]:
+    """The fields readable off a node. On a list those belong to one element, not to the list"""
+    if isinstance(node, ObjectNode):
+        return node.properties
+    if isinstance(node, ListNode):
+        return child_properties(node.items)
+    return {}
 
 
 class TemplateReport(NamedTuple):

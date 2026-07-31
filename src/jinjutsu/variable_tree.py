@@ -10,9 +10,22 @@ from enum import Enum, auto
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
 
-from .types import PrintedPath, VariableNode, WalkResult
+from .types import (
+    SCALAR_NODES,
+    BooleanNode,
+    ListNode,
+    ObjectNode,
+    PrintedPath,
+    StringNode,
+    UnknownNode,
+    VariableNode,
+    WalkResult,
+)
 from .utils.ast_utils import NamePathSegment, jinja_local_variables, split_ast_object_path, strip_list_operations
 from .utils.string_utils import warning_to_string
+
+# Where a node lives: a name in a dict, or the element of a list
+Slot = tuple[dict[str, VariableNode], str] | ListNode
 
 
 class LeafUse(Enum):
@@ -27,20 +40,20 @@ class VariableTreeVisitor(NodeVisitor):
 
         {% for s in case.sections %}{{ s.name }}{% endfor %}
 
-        root = {"case": {"type": "object", "properties": {
-                    "sections": {"type": "list", "properties": {"name": {"type": "string"}}}}}}
+        root = {"case": ObjectNode(properties={
+                    "sections": ListNode(items=ObjectNode(properties={"name": StringNode()}))})}
 
     `s` never lands in `root`, since the template invents it and nobody supplies a value for it
-    While the loop body is walked, `s` is bound to the `case.sections` node itself rather than a copy
-    So `{{ s.name }}` writes `name` into that node's properties, which is how a list describes its item
+    While the loop body is walked, `s` is bound to the `case.sections` list, and its Slot means the
+    element of that list, so `{{ s.name }}` writes `name` into `items` rather than into the list
 
-    `self._scope` holds one dict per nesting level, mapping each invented name to the node it's bound to
+    `self._scope` holds one dict per nesting level, mapping each invented name to the Slot it's bound to
     `visit_For` and the parameterized blocks push a dict on entry and pop it on exit
     `_lookup_frame` searches innermost first, so the inner `s` below shadows the outer one
 
         {% for s in outer %}{% for s in inner %}{{ s.x }}{% endfor %}{% endfor %}
 
-        root = {"outer": {"type": "list"}, "inner": {"type": "list", "properties": {"x": {"type": "string"}}}}
+        root = {"outer": ListNode(), "inner": ListNode(items=ObjectNode(properties={"x": StringNode()}))}
 
     `walk` returns the tree alongside the warnings and printed paths, because only this pass sees how
     each path is used. Every visit_* method sets `lineno`, otherwise a warning cites a stale line
@@ -48,7 +61,7 @@ class VariableTreeVisitor(NodeVisitor):
 
     def __init__(self) -> None:
         self._root: dict[str, VariableNode] = {}
-        self._scope: list[dict[str, VariableNode]] = [{}]
+        self._scope: list[dict[str, Slot]] = [{}]
         self._warnings: list[str] = []
         self._conflict_paths: set[str] = set()
         # {{ case }} only looks wrong once {{ case.title }} somewhere else has made `case` an object
@@ -81,11 +94,12 @@ class VariableTreeVisitor(NodeVisitor):
 
     def visit_For(self, node: nodes.For) -> None:  # noqa: N802
         self._lineno = node.iter.lineno
-        frame: dict[str, VariableNode] = {}
+        frame: dict[str, Slot] = {}
         path = split_ast_object_path(strip_list_operations(node.iter))
         if not path:
             self._record_load(node.iter)
-        list_node: VariableNode = self._ensure_list(*path) if path else {"type": "list"}
+        # The target is bound to the list itself, so its slot means "one element of this list"
+        list_node = self._ensure_list(*path) if path else ListNode()
         for target in jinja_local_variables(node.target):
             frame[target] = list_node
         self._scope.append(frame)
@@ -116,22 +130,22 @@ class VariableTreeVisitor(NodeVisitor):
     def visit_Assign(self, node: nodes.Assign) -> None:  # noqa: N802
         self._lineno = node.lineno
         for target in jinja_local_variables(node.target):
-            self._scope[-1][target] = {"type": "object", "properties": {}}
+            self._scope[-1][target] = _discarded_slot(target)
         self._record_load(node.node)
 
     def visit_AssignBlock(self, node: nodes.AssignBlock) -> None:  # noqa: N802
         self._lineno = node.lineno
         for target in jinja_local_variables(node.target):
-            self._scope[-1][target] = {"type": "object", "properties": {}}
+            self._scope[-1][target] = _discarded_slot(target)
         for child in node.body:
             self.visit(child)
 
     def _visit_parameterized_block(self, targets: Sequence[nodes.Node], body: list[nodes.Node]) -> None:
         """Walk a macro, call, or with block with its locals bound, so they stay out of the tree"""
-        frame: dict[str, VariableNode] = {}
+        frame: dict[str, Slot] = {}
         for target in targets:
             for name in jinja_local_variables(target):
-                frame[name] = {"type": "object", "properties": {}}
+                frame[name] = _discarded_slot(name)
         self._scope.append(frame)
         for child in body:
             self.visit(child)
@@ -193,58 +207,53 @@ class VariableTreeVisitor(NodeVisitor):
         return True
 
     def _record_path(self, root: str, attrs: list[NamePathSegment], use: LeafUse) -> None:
-        location = self._locate_leaf(root, attrs)
-        if not location:
-            return
-        container, key = location
-        self._set_leaf(container, key, use)
+        self._set_leaf(self._locate_leaf(root, attrs), use)
 
-    def _ensure_list(self, root: str, attrs: list[NamePathSegment]) -> VariableNode:
-        location = self._locate_leaf(root, attrs)
-        if not location:
-            return {"type": "list"}
-        container, key = location
-        existing = container.get(key)
-        if existing and existing.get("type") == "list":
-            return existing
-        node: VariableNode = {"type": "list"}
-        container[key] = node
-        return node
+    def _ensure_list(self, root: str, attrs: list[NamePathSegment]) -> ListNode:
+        return self._ensure_list_at(self._locate_leaf(root, attrs))
 
-    def _locate_leaf(self, root: str, attrs: list[NamePathSegment]) -> tuple[dict[str, VariableNode], str] | None:
+    def _locate_leaf(self, root: str, attrs: list[NamePathSegment]) -> Slot:
         frame = self._lookup_frame(root)
-        if not attrs:
-            return frame or self._root, root
-
-        # A local starts from the node it's bound to, so its segments land on that node
-        container = frame[root].setdefault("properties", {}) if frame else self._root
-        # The name still waiting to be placed. None when container already points at it
-        key: str | None = None if frame else root
+        # A local starts from the slot it's bound to, so its segments land on that node
+        slot: Slot = frame[root] if frame else (self._root, root)
         path = [root]
 
         for segment in attrs:
             if isinstance(segment, int):
-                if key is None:
-                    return None
-                container = self._ensure_container(container, key, as_list=True)
-                key = None
-            elif key is None:
-                key = segment
-                path.append(segment)
+                slot = self._ensure_list_at(slot)
             else:
-                self._record_container_conflict(container, key, ".".join(path), segment)
-                container = self._ensure_container(container, key, as_list=False)
-                key = segment
+                slot = (self._ensure_object_at(slot, ".".join(path), segment).properties, segment)
                 path.append(segment)
-        return (container, key) if key is not None else None
+        return slot
 
-    def _record_container_conflict(self, container: dict[str, VariableNode], key: str, path: str, segment: str) -> None:
+    def _ensure_list_at(self, slot: Slot) -> ListNode:
+        existing = _slot_get(slot)
+        if isinstance(existing, ListNode):
+            return existing
+        node = ListNode()
+        _slot_set(slot, node)
+        return node
+
+    def _ensure_object_at(self, slot: Slot, path: str, segment: str) -> ObjectNode:
+        existing = _slot_get(slot)
+        # A field read off a list belongs to its element, so descend rather than replace the list
+        if isinstance(existing, ListNode):
+            return self._ensure_object_at(existing, path, segment)
+        if isinstance(existing, ObjectNode):
+            return existing
+        # An element has no name of its own to blame, so only a named slot can clash
+        if not isinstance(slot, ListNode):
+            self._record_container_conflict(existing, path, segment)
+        node = ObjectNode()
+        _slot_set(slot, node)
+        return node
+
+    def _record_container_conflict(self, existing: VariableNode | None, path: str, segment: str) -> None:
         """Record a warning when a path already used as a plain value is now being read as an object"""
-        existing = container.get(key)
         if any(leaf is existing for leaf in self._guarded):
             # {% if section %}{{ section.title }}{% endif %} guards an optional object and isn't considered a clash
             return
-        if not existing or existing.get("type") not in ("string", "boolean"):
+        if not isinstance(existing, SCALAR_NODES):
             return
         self._conflict_paths.add(path)
         self._warnings.append(
@@ -260,30 +269,42 @@ class VariableTreeVisitor(NodeVisitor):
             )
         )
 
-    def _ensure_container(self, container: dict[str, VariableNode], key: str, as_list: bool) -> dict[str, VariableNode]:
-        existing = container.get(key)
-        if existing and existing.get("type") in ("object", "list"):
-            return existing.setdefault("properties", {})
-        properties: dict[str, VariableNode] = {}
-        container[key] = {"type": "list" if as_list else "object", "properties": properties}
-        return properties
-
-    def _set_leaf(self, container: dict[str, VariableNode], key: str, use: LeafUse) -> None:
-        existing = container.get(key)
-        if not existing:
-            leaf: VariableNode = {"type": "string"} if use is LeafUse.VALUE else {"type": "boolean"}
-            container[key] = leaf
+    def _set_leaf(self, slot: Slot, use: LeafUse) -> None:
+        existing = _slot_get(slot)
+        if existing is None or isinstance(existing, UnknownNode):
+            leaf: VariableNode = StringNode() if use is LeafUse.VALUE else BooleanNode()
+            _slot_set(slot, leaf)
             if use is LeafUse.GUARD:
                 self._guarded.append(leaf)
             return
         if use is not LeafUse.GUARD:
             # Any other use settles the type, so it can no longer change
             self._guarded = [leaf for leaf in self._guarded if leaf is not existing]
-        if existing.get("type") == "boolean" and use is LeafUse.VALUE:
-            existing["type"] = "string"
+        if isinstance(existing, BooleanNode) and use is LeafUse.VALUE:
+            _slot_set(slot, StringNode())
 
-    def _lookup_frame(self, name: str) -> dict[str, VariableNode] | None:
+    def _lookup_frame(self, name: str) -> dict[str, Slot] | None:
         for frame in reversed(self._scope):
             if name in frame:
                 return frame
         return None
+
+
+def _slot_get(slot: Slot) -> VariableNode | None:
+    if isinstance(slot, ListNode):
+        return slot.items
+    container, key = slot
+    return container.get(key)
+
+
+def _slot_set(slot: Slot, node: VariableNode) -> None:
+    if isinstance(slot, ListNode):
+        slot.items = node
+    else:
+        container, key = slot
+        container[key] = node
+
+
+def _discarded_slot(name: str) -> Slot:
+    """A slot for a name the template invents, so writes to it never reach the tree"""
+    return {name: ObjectNode()}, name

@@ -1,4 +1,4 @@
-from jinjutsu import analyze_jinja_template
+from jinjutsu import BooleanNode, ListNode, StringNode, analyze_jinja_template
 
 from .helpers import conflicts_for, variables_for
 
@@ -23,13 +23,13 @@ def test_with_block_locals_are_scoped():
     text = "{% with a = obj %}{{ a }}{{ a.b }}{% endwith %}"
 
     assert conflicts_for(text) == []
-    assert variables_for(text) == {"obj": {"type": "string"}}
+    assert variables_for(text) == {"obj": StringNode()}
 
 
 def test_with_block_reads_its_value_before_binding_the_name():
     text = "{% with a = a %}{{ a }}{% endwith %}"
 
-    assert variables_for(text) == {"a": {"type": "string"}}
+    assert variables_for(text) == {"a": StringNode()}
 
 
 def test_macro_and_call_block_parameters_are_scoped():
@@ -37,7 +37,7 @@ def test_macro_and_call_block_parameters_are_scoped():
     call_block = "{% call(item) render() %}{{ item.a }}{% endcall %}"
 
     assert conflicts_for(macro) == []
-    assert variables_for(macro) == {"cfg": {"type": "list", "item_format": "string"}}
+    assert variables_for(macro) == {"cfg": ListNode(items=StringNode())}
     assert "item" not in variables_for(call_block)
 
 
@@ -46,7 +46,7 @@ def test_extracts_ternary_and_filter_argument_variables():
 
     variables = variables_for(text)
 
-    assert variables["show_it"] == {"type": "boolean"}
+    assert variables["show_it"] == BooleanNode()
     assert set(variables) == {"value", "show_it", "fallback", "price", "fallback_price"}
 
 

@@ -1,3 +1,4 @@
+from jinjutsu import ListNode, ObjectNode, StringNode
 from jinjutsu.utils.docxtpl_utils import normalize_docxtpl_prefixes
 
 from .helpers import variables_for, warnings_for
@@ -8,11 +9,7 @@ def test_extracts_docxtpl_tr_loop_variable():
 
     variables = variables_for(text)
 
-    assert variables["funding_rows"] == {
-        "type": "list",
-        "item_format": "object",
-        "properties": {"source": {"type": "string"}},
-    }
+    assert variables["funding_rows"] == ListNode(items=ObjectNode(properties={"source": StringNode()}))
 
 
 def test_extracts_all_docxtpl_loop_prefixes():
@@ -29,9 +26,9 @@ def test_docxtpl_cell_tags_supply_their_argument_as_a_variable():
 
     variables = variables_for(text)
 
-    assert variables["col_count"] == {"type": "string"}
-    assert variables["row_color"] == {"type": "string"}
-    assert variables["title"] == {"type": "string"}
+    assert variables["col_count"] == StringNode()
+    assert variables["row_color"] == StringNode()
+    assert variables["title"] == StringNode()
 
 
 def test_cell_tag_split_across_a_line_keeps_its_newline():

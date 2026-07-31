@@ -35,7 +35,7 @@ def test_json_output_carries_the_variables_and_diagnostics(tmp_path, capsys):
 
     payload = json.loads(capsys.readouterr().out)
     assert payload[0]["file"] == template
-    assert payload[0]["variables"]["store"]["type"] == "object"
+    assert payload[0]["variables"]["store"]["kind"] == "object"
     assert len(payload[0]["diagnostics"]) == 1
 
 

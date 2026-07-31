@@ -8,10 +8,11 @@ Exits 1 when a template has diagnostics, so the command works as a check in CI o
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from .analyze import analyze_jinja_template
-from .types import VariableNode
+from .types import ListNode, UnknownNode, VariableNode, child_properties
 
 NAME_COLUMN = 20  # Wide enough for most names
 INLINE_LABEL = "<string>"  # Stands in for the filename when the template came from the command line
@@ -29,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     results = [_analyze(label, text) for _, (label, text) in sources]
 
     if args.json:
-        print(json.dumps(results, indent=2))
+        print(json.dumps(results, indent=2, default=asdict))
     else:
         for index, result in enumerate(results):
             if index:
@@ -44,17 +45,20 @@ def _render_tree(variables: dict[str, VariableNode]) -> list[str]:
     lines = []
     for name, node in variables.items():
         lines.append(f"{name.ljust(NAME_COLUMN)}{_type_label(node)}")
-        if children := node.get("properties"):
+        if children := child_properties(node):
             lines.extend(_render_children(children, ""))
     return lines
 
 
 def _type_label(node: VariableNode) -> str:
     """The type as the README writes it, where a list also says what one element looks like"""
-    if node["type"] == "list":
-        item_format = node.get("item_format")
-        return f"list of {item_format}s" if item_format else "list"
-    return node["type"]
+    if not isinstance(node, ListNode):
+        return node.kind
+    if isinstance(node.items, UnknownNode):
+        return "list"
+    if isinstance(node.items, ListNode):
+        return "list of lists"
+    return f"list of {node.items.kind}s"
 
 
 def _render_children(nodes: dict[str, VariableNode], prefix: str) -> list[str]:
@@ -64,7 +68,7 @@ def _render_children(nodes: dict[str, VariableNode], prefix: str) -> list[str]:
         is_last = index == last_index
         label = f"{prefix}{'`-- ' if is_last else '|-- '}{name}"
         lines.append(f"{label.ljust(NAME_COLUMN)}{_type_label(node)}")
-        if children := node.get("properties"):
+        if children := child_properties(node):
             lines.extend(_render_children(children, prefix + ("    " if is_last else "|   ")))
     return lines
 

@@ -13,7 +13,7 @@ from .checks.delimiters import check_malformed_tags, check_misplaced_statement_d
 from .checks.names import check_builtin_method_attributes, check_hyphenated_variables
 from .checks.objects import check_no_objects_printed_directly
 from .checks.parser import check_jinja_syntax, should_defer_to_tag_counts
-from .types import TemplateReport, VariableNode
+from .types import TemplateReport, UnknownNode, VariableNode
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
 from .utils.tag_utils import TemplateText, read_template
 from .variable_tree import VariableTreeVisitor
@@ -69,20 +69,6 @@ def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, Variable
     except TemplateAssertionError:
         return {}, []
 
-    variables: dict[str, VariableNode] = {name: walked.root.get(name, {"type": "string"}) for name in sorted(required)}
-    _refine_list_formats(variables)
+    # A name jinja requires that the walk never shaped carries no evidence at all, so it stays unknown
+    variables: dict[str, VariableNode] = {name: walked.root.get(name, UnknownNode()) for name in sorted(required)}
     return variables, list(dict.fromkeys(walked.warnings + check_no_objects_printed_directly(walked)))
-
-
-def _refine_list_formats(tree: dict[str, VariableNode]) -> None:
-    # Derive item_format for every list in the tree, now that those item's fields are known
-    for var_info in tree.values():
-        if var_info.get("type") == "list":
-            if "properties" in var_info and var_info["properties"]:
-                var_info["item_format"] = "object"
-                _refine_list_formats(var_info["properties"])
-            else:
-                var_info["item_format"] = "string"
-                var_info.pop("properties", None)
-        elif var_info.get("type") == "object":
-            _refine_list_formats(var_info.get("properties", {}))
