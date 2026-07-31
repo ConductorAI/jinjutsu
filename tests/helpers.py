@@ -1,7 +1,7 @@
 from jinja2 import Environment, TemplateSyntaxError
 
 from jinjutsu import analyze_jinja_template
-from jinjutsu.main import _build_variable_tree
+from jinjutsu.analyze import _build_variable_tree
 from jinjutsu.utils.docxtpl_utils import normalize_docxtpl_prefixes
 
 

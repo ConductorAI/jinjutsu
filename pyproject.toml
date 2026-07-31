@@ -20,6 +20,9 @@ classifiers = [
 ]
 dependencies = ["jinja2>=3.0"]
 
+[project.scripts]
+jinjutsu = "jinjutsu.main:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
 
