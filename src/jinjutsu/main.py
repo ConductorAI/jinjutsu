@@ -17,6 +17,7 @@ INLINE_LABEL = "<string>"  # Stands in for the filename when the template came f
 TEMPLATE_MARKERS = ("{{", "}}", "{%", "%}", "{#", "#}")
 SECTIONS = ("warnings", "tree", "schema")
 DEFAULT_SECTIONS = ("warnings", "tree")
+DIVIDER_WIDTH = 64
 # What to say when the requested sections all came back empty. A schema always prints, so it is absent
 NOTHING_TO_SAY = {
     ("warnings", "tree"): "No variables and nothing wrong",
@@ -88,14 +89,17 @@ def _print_text(result: dict, sections: tuple[str, ...], *, show_filename: bool)
     properties = result["schema"]["properties"]
     blocks = []
     if "warnings" in sections and result["diagnostics"]:
-        blocks.append("\n".join(result["diagnostics"]))
+        blocks.append(("warnings", "\n".join(result["diagnostics"])))
     if "tree" in sections and properties:
-        blocks.append("\n".join(render_tree(properties)))
+        blocks.append(("tree", "\n".join(render_tree(properties))))
     if "schema" in sections:
-        blocks.append(json.dumps(result["schema"], indent=2))
+        blocks.append(("schema", json.dumps(result["schema"], indent=2)))
 
-    if blocks:
-        print("\n\n".join(blocks))
+    # Only label once there is more than one block, so a lone --schema still redirects to a valid file
+    if len(blocks) > 1:
+        print("\n\n".join(f"{f'===== {name} '.ljust(DIVIDER_WIDTH, '=')}\n{body}" for name, body in blocks))
+    elif blocks:
+        print(blocks[0][1])
     elif not result["diagnostics"]:
         print(NOTHING_TO_SAY[sections])
 

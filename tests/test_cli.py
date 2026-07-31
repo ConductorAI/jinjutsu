@@ -154,6 +154,32 @@ def test_the_empty_message_only_mentions_the_sections_asked_for(tmp_path, capsys
     assert capsys.readouterr().out == "No variables and nothing wrong\n"
 
 
+def test_several_sections_are_labelled_with_dividers(tmp_path, capsys):
+    template = write(tmp_path, "{{ store.items }}")
+
+    main([template])
+
+    out = capsys.readouterr().out
+    assert out.startswith("===== warnings ====")
+    assert "\n===== tree ====" in out
+
+
+def test_a_lone_section_is_printed_bare_so_it_can_be_redirected(tmp_path, capsys):
+    template = write(tmp_path, "{{ title }}")
+
+    main([template, "--schema"])
+
+    assert json.loads(capsys.readouterr().out)["properties"] == {"title": {"type": "string"}}
+
+
+def test_a_clean_template_prints_its_tree_without_a_divider(tmp_path, capsys):
+    template = write(tmp_path, "{{ a.b }}")
+
+    main([template])
+
+    assert capsys.readouterr().out.startswith("a                   object")
+
+
 def test_a_missing_file_exits_two_without_analyzing(tmp_path, capsys):
     assert main([str(tmp_path / "nope.jinja")]) == 2
 
