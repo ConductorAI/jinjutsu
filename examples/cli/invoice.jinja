@@ -1,0 +1,4 @@
+{{ invoice.number }}
+{% for item in invoice.lines %}{{ item.desc }} {{ item.amount }}
+{% endfor %}
+{% if invoice.paid %}PAID{% endif %}

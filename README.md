@@ -112,6 +112,14 @@ report.diagnostics  # list[str] — formatted strings, ready to show the user
 `variable_tree.py` and the text checks in `checks/`. It never raises for a malformed template — a
 parse failure comes back as a diagnostic.
 
+The same analysis is available as a command, with an exit code a CI job or a pre-commit hook can read:
+
+```sh
+jinjutsu TEMPLATE [TEMPLATE ...] [--warnings] [--tree] [--schema] [--all] [--json]
+```
+
+See [examples/cli](examples/cli) for what each flag prints.
+
 ## The schema
 
 `report.schema` is a JSON Schema for the context object the template expects. Given:
