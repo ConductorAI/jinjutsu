@@ -15,9 +15,9 @@ def test_a_clean_template_exits_zero_and_prints_its_tree(tmp_path, capsys):
     assert main([template]) == 0
 
     out = capsys.readouterr().out
-    assert "case                object" in out
-    assert "|-- title           string" in out
-    assert "`-- sections        list of objects" in out
+    assert "case          object" in out
+    assert "|-- title     string" in out
+    assert "`-- sections  list of objects" in out
 
 
 def test_a_template_with_a_problem_exits_one_and_says_what_is_wrong(tmp_path, capsys):
@@ -86,7 +86,7 @@ def test_warnings_only_omits_the_tree(tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert "built-in method" in out
-    assert "store               object" not in out
+    assert "store      object" not in out
 
 
 def test_tree_only_omits_the_warnings(tmp_path, capsys):
@@ -95,7 +95,7 @@ def test_tree_only_omits_the_warnings(tmp_path, capsys):
     assert main([template, "--tree"]) == 1
 
     out = capsys.readouterr().out
-    assert "store               object" in out
+    assert "store      object" in out
     assert "built-in method" not in out
 
 
@@ -115,7 +115,7 @@ def test_all_prints_every_section(tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert "built-in method" in out
-    assert "store               object" in out
+    assert "store      object" in out
     assert '"$schema"' in out
 
 
@@ -125,7 +125,7 @@ def test_sections_compose(tmp_path, capsys):
     main([template, "--tree", "--schema"])
 
     out = capsys.readouterr().out
-    assert "store               object" in out
+    assert "store      object" in out
     assert '"$schema"' in out
     assert "built-in method" not in out
 
@@ -166,7 +166,20 @@ def test_a_clean_template_prints_its_tree_without_a_divider(tmp_path, capsys):
 
     main([template])
 
-    assert capsys.readouterr().out.startswith("a                   object")
+    assert capsys.readouterr().out.startswith("a      object")
+
+
+def test_the_type_column_follows_the_longest_label_so_every_row_lines_up(tmp_path, capsys):
+    template = write(tmp_path, "{{ short }}{{ deep.some_extremely_long_field_name }}")
+
+    main([template, "--tree"])
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines == [
+        "deep                                object",
+        "`-- some_extremely_long_field_name  string",
+        "short                               string",
+    ]
 
 
 def test_a_missing_file_exits_two_without_analyzing(tmp_path, capsys):

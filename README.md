@@ -153,12 +153,12 @@ See [examples/cli](examples/cli) for what each flag prints.
 The CLI prints the same thing as a tree:
 
 ```
-case                object
-|-- header          object
-|   `-- title       string
-|-- sections        list of objects
-|   `-- name        string              a field on each section, not on the list
-`-- sealed          boolean
+case           object
+|-- header     object
+|   `-- title  string
+|-- sections   list of objects
+|   `-- name   string           a field on each section, not on the list
+`-- sealed     boolean
 ```
 
 Three things are worth knowing:

@@ -6,12 +6,12 @@
 
 ```sh
 $ jinjutsu examples/cli/invoice.jinja
-invoice             object
-|-- number          string
-|-- lines           list of objects
-|   |-- desc        string
-|   `-- amount      string
-`-- paid            boolean
+invoice         object
+|-- number      string
+|-- lines       list of objects
+|   |-- desc    string
+|   `-- amount  string
+`-- paid        boolean
 ```
 
 ```sh
@@ -24,8 +24,8 @@ Line 1: Field 'items' collides with a built-in method
   {{ client.items }}
 
 ===== tree =====================================================
-client              object
-`-- items           string
+client     object
+`-- items  string
 ```
 
 ## `--warnings`
@@ -43,8 +43,8 @@ Line 1: Field 'items' collides with a built-in method
 
 ```sh
 $ jinjutsu examples/cli/client.jinja --tree
-client              object
-`-- items           string
+client     object
+`-- items  string
 ```
 
 ## `--schema`
@@ -91,7 +91,7 @@ Nothing wrong
 
 ```sh
 $ jinjutsu "hi {{ variable + 1 }}"
-variable            string
+variable            number
 ```
 
 Quote it — an unquoted `{{ ... }}` is brace expansion in bash and zsh.

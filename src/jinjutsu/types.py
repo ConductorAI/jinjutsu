@@ -6,8 +6,7 @@ from typing import Literal, NamedTuple
 
 @dataclass
 class _Node:
-    # A name only ever tested for truthiness renders fine when absent, so it is optional in the schema
-    # Out of __eq__ because it says how a name is used, not what shape it has
+    # Only ever tested for truthiness, so nothing has pinned the shape yet. Out of __eq__: a use, not a shape
     guard_only: bool = field(default=False, compare=False)
 
 
