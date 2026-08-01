@@ -65,6 +65,15 @@ def test_unknown_filter_does_not_raise():
     assert warnings_for(text) == []
 
 
+def test_unknown_filter_still_reports_what_the_walk_found():
+    # The filter costs us the names, but it says nothing about the shapes the walk already saw
+    printed = "{{ case.title }}{{ case }}{{ amount | to_json }}"
+    clashed = "{{ total }}{{ total.amount }}{{ amount | to_json }}"
+
+    assert "'case' is an object and cannot be printed directly" in warnings_for(printed)[0]
+    assert "'total' is used as both a value and an object" in warnings_for(clashed)[0]
+
+
 def test_malformed_template_returns_empty_schema():
     text = "{% for row in funding_rows %}{{ row.source }}"
 

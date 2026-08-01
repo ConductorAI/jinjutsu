@@ -61,6 +61,7 @@ def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, Variable
         return {}, []
 
     walked = VariableTreeVisitor().walk(ast)
+    warnings = list(dict.fromkeys(walked.warnings + check_no_objects_printed_directly(walked)))
 
     # Jinja decides which names the template actually asks for
     # The walk only says what shape each one has
@@ -68,8 +69,8 @@ def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, Variable
     try:
         required = meta.find_undeclared_variables(ast)
     except TemplateAssertionError:
-        return {}, []
+        return {}, warnings
 
     # A name jinja requires that the walk never shaped carries no evidence at all, so it stays unknown
     variables: dict[str, VariableNode] = {name: walked.root.get(name, UnknownNode()) for name in sorted(required)}
-    return variables, list(dict.fromkeys(walked.warnings + check_no_objects_printed_directly(walked)))
+    return variables, warnings

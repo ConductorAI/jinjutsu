@@ -80,7 +80,7 @@ message · ❌ no finding, template reported clean
 | Whole object printed with `{{ }}`                                  | ✅                                          | ❌                                      | ❌                   |
 | Whole list printed with `{{ }}`                                    | ✅                                          | ❌                                      | ❌                   |
 | Same name used as both scalar and object                           | ✅                                          | ❌                                      | ❌                   |
-| Unknown filter (`{{ x \| to_json }}`)                              | ❌ zero variables, no warning               | ❌                                      | ❌                   |
+| Unknown filter (`{{ x \| to_json }}`)                              | ❌ zero variables, other warnings still made | ❌                                      | ❌                   |
 | **docxtpl-specific**                                               |                                             |                                         |                      |
 | `{%tr %}` / `{%p %}` / `{{r }}` prefixed tags                      | ✅ correctly ignored                        | ❌ false positive — unknown tag `'tr'`  | ❌ false positive    |
 | `{% vm %}` `{% hm %}` `{% colspan n %}` `{% cellbg c %}`, used well | ✅ ignored, arguments extracted             | ❌ false positive — unknown tag `'tr'`  | ❌ false positive    |
@@ -369,7 +369,8 @@ what decides which names a template actually requires.
   a name someone meant to write with an underscore. Writing `{{ total - discount }}` clears it.
 - **An unknown filter reports no variables.** Asking Jinja for the names compiles the template, so
   `{{ x | to_json }}` fails there rather than at parse time, and a caller may well register that
-  filter later. The template comes back with zero variables and no warning.
+  filter later. The template comes back with zero variables, though the warnings that do not depend
+  on those names — a printed object, a name used as both a value and an object — are still reported.
 - **A template that will not parse reports no variables.** Diagnostics explain why, but the author
   has to fix them before seeing any shape information.
 - **Line numbers are lines of the extracted text**, not of the Word document, since the conversion to
