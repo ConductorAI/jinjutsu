@@ -14,6 +14,7 @@ from .types import (
     SCALAR_NODES,
     BooleanNode,
     ListNode,
+    NumberNode,
     ObjectNode,
     PrintedPath,
     StringNode,
@@ -27,11 +28,20 @@ from .utils.string_utils import warning_to_string
 # Where a node lives: a name in a dict, or the element of a list
 Slot = tuple[dict[str, VariableNode], str] | ListNode
 
+# Operators a string cannot survive, so every operand is a number
+# Multiplication is here because "a" * "b" raises: one side always counts, even when the other repeats
+NUMERIC_OPERATORS = (nodes.Sub, nodes.Div, nodes.FloorDiv, nodes.Pow, nodes.Mul)
+# Concat and printf read the same as addition and modulo, so a numeric literal has to say which
+AMBIGUOUS_OPERATORS = (nodes.Add, nodes.Mod)
+# Strings compare lexicographically, so these only say number against a numeric literal
+ORDERED_COMPARISONS = ("lt", "lteq", "gt", "gteq")
+
 
 class LeafUse(Enum):
     VALUE = auto()  # Read for its value, e.g. {{ x }} or {% if x == 'FINAL' %}
     GUARD = auto()  # Tested for truthiness, e.g. {% if x %}
     BOOLEAN = auto()  # Compared against a boolean literal, e.g. {% if x == true %}
+    NUMBER = auto()  # Used in arithmetic, e.g. {{ x - 1 }} or {% if x > 5 %}
 
 
 class VariableTreeVisitor(NodeVisitor):
@@ -171,8 +181,34 @@ class VariableTreeVisitor(NodeVisitor):
         if path:
             self._record_path(*path, use=LeafUse.VALUE)
             return
+        if self._record_arithmetic(node):
+            return
         for child in node.iter_child_nodes():
             self._record_load(child)
+
+    def _record_arithmetic(self, node: nodes.Node) -> bool:
+        """Type the operands of an arithmetic expression, which the generic walk below would flatten"""
+        if isinstance(node, (nodes.Neg, nodes.Pos)):
+            self._record_operand(node.node, numeric=True)
+            return True
+        if isinstance(node, NUMERIC_OPERATORS):
+            operands = (node.left, node.right)
+            numeric = True
+        elif isinstance(node, AMBIGUOUS_OPERATORS):
+            operands = (node.left, node.right)
+            numeric = any(_is_numeric_const(operand) for operand in operands)
+        else:
+            return False
+        for operand in operands:
+            self._record_operand(operand, numeric=numeric)
+        return True
+
+    def _record_operand(self, node: nodes.Node, *, numeric: bool) -> None:
+        path = split_ast_object_path(node)
+        if path:
+            self._record_path(*path, use=LeafUse.NUMBER if numeric else LeafUse.VALUE)
+        else:
+            self._record_load(node)
 
     def _record_test(self, node: nodes.Node) -> None:
         if isinstance(node, (nodes.And, nodes.Or)):
@@ -182,13 +218,26 @@ class VariableTreeVisitor(NodeVisitor):
         if isinstance(node, nodes.Not):
             self._record_test(node.node)
             return
-        if self._record_boolean_comparison(node):
+        if self._record_boolean_comparison(node) or self._record_numeric_comparison(node):
             return
         path = split_ast_object_path(node)
         if path:
             self._record_path(*path, use=LeafUse.GUARD)
             return
         self._record_load(node)
+
+    def _record_numeric_comparison(self, node: nodes.Node) -> bool:
+        if not isinstance(node, nodes.Compare) or len(node.ops) != 1:
+            return False
+        if node.ops[0].op not in ORDERED_COMPARISONS:
+            return False
+        # Either side can hold the literal, so {% if 5 < count %} reads the same as {% if count > 5 %}
+        for value, other in ((node.expr, node.ops[0].expr), (node.ops[0].expr, node.expr)):
+            path = split_ast_object_path(value)
+            if path and _is_numeric_const(other):
+                self._record_path(*path, use=LeafUse.NUMBER)
+                return True
+        return False
 
     def _record_boolean_comparison(self, node: nodes.Node) -> bool:
         if not isinstance(node, nodes.Compare) or len(node.ops) != 1:
@@ -271,13 +320,15 @@ class VariableTreeVisitor(NodeVisitor):
     def _set_leaf(self, slot: Slot, use: LeafUse) -> None:
         existing = _slot_get(slot)
         if existing is None or isinstance(existing, UnknownNode):
-            leaf: VariableNode = StringNode() if use is LeafUse.VALUE else BooleanNode(guard_only=use is LeafUse.GUARD)
-            _slot_set(slot, leaf)
+            _slot_set(slot, _new_leaf(use))
             return
         if use is not LeafUse.GUARD:
             # Any other use settles the type, and means the value has to be supplied after all
             existing.guard_only = False
-        if isinstance(existing, BooleanNode) and use is LeafUse.VALUE:
+        # Arithmetic is the most specific thing a scalar can be used for, so it wins over the others
+        if use is LeafUse.NUMBER and isinstance(existing, SCALAR_NODES):
+            _slot_set(slot, NumberNode())
+        elif isinstance(existing, BooleanNode) and use is LeafUse.VALUE:
             _slot_set(slot, StringNode())
 
     def _lookup_frame(self, name: str) -> dict[str, Slot] | None:
@@ -300,6 +351,19 @@ def _slot_set(slot: Slot, node: VariableNode) -> None:
     else:
         container, key = slot
         container[key] = node
+
+
+def _new_leaf(use: LeafUse) -> VariableNode:
+    if use is LeafUse.NUMBER:
+        return NumberNode()
+    if use is LeafUse.VALUE:
+        return StringNode()
+    return BooleanNode(guard_only=use is LeafUse.GUARD)
+
+
+def _is_numeric_const(node: nodes.Node) -> bool:
+    # bool is an int in python, but {% if x == true %} is already read as a boolean elsewhere
+    return isinstance(node, nodes.Const) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool)
 
 
 def _guard_only(node: VariableNode | None) -> bool:

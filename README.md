@@ -187,6 +187,12 @@ implementation detail of `types.py` and is not exported; `schema.py` is the only
 | `{% if x %}{{ x }}{% endif %}`              | `string` — rendering pins it                    |
 | `{% if x == true %}`                        | `boolean`                                       |
 | `{% if x == 'FINAL' %}`, `{% if x == 1 %}`  | `string`                                        |
+| `{{ x - 1 }}`, `{{ x / 2 }}`, `{{ x ** 2 }}`, `{{ -x }}` | `number` — a string cannot survive these |
+| `{{ x * y }}`, `{{ x * 2 }}`, `{{ '-' * x }}` | `number` — `"a" * "b"` raises, so a side always counts |
+| `{{ x + 1 }}`, `{{ x % 2 }}`               | `number` — the literal says which meaning       |
+| `{{ x + y }}`, `{{ x % y }}`, `{{ x ~ y }}` | `string` — as likely concat or printf           |
+| `{% if x > 5 %}`, `{% if 5 < x %}`          | `number`                                        |
+| `{% if x > y %}`, `{% if x > 'm' %}`        | `string` — strings compare lexicographically    |
 | `{% if x %}{{ x.title }}{% endif %}`        | `object` — the guard was an existence check     |
 | `{% for s in xs %}{{ s }}{% endfor %}`      | `xs`: list of strings                           |
 | `{% for s in xs %}{{ s.a }}{% endfor %}`    | `xs`: list of objects                           |
@@ -351,10 +357,14 @@ what decides which names a template actually requires.
 - **An unevidenced shape is reported as `string`.** A name jinja requires that the walk never shaped
   serializes as `{"type": "string"}`, which is a default rather than a finding. Validating a context
   that supplies a number there fails against a claim the template never made.
-- **Arithmetic and filters do not inform the type.** `{{ v + 1 }}`, `{{ v * 2 }}`, `{{ v | int }}` and
-  `{% if v > 5 %}` all report `v` as a string. The operator node is traversed through to reach the
-  name beneath it, and nothing carries down what it was reached through. `NumberNode` exists in the
-  model for this, and nothing produces it yet.
+- **Filters do not inform the type.** `{{ v | int }}` reports `v` as a string, because the filter
+  wrapper is traversed through to reach the name beneath it and nothing carries down what it was
+  reached through. Arithmetic *is* read this way; filters are the remaining case, and they need a
+  decision first — `| int` suggests the value arrives as a string needing coercion, and `| length`
+  makes the *expression* a number while the name stays a list.
+- **`{% if x == 1 %}` reports `string`, but `{% if x > 1 %}` reports `number`.** Equality is left
+  alone deliberately: a value compared against `1` often arrives as `"1"` from a spreadsheet, whereas
+  nothing orders a value against a number unless it is one. The inconsistency is real.
 - **`{{ total-discount }}` warns even though it is valid subtraction**, because it is far more often
   a name someone meant to write with an underscore. Writing `{{ total - discount }}` clears it.
 - **An unknown filter reports no variables.** Asking Jinja for the names compiles the template, so

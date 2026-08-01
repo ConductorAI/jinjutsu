@@ -83,3 +83,10 @@ def test_a_template_that_will_not_parse_returns_a_schema_with_no_properties():
     schema = schema_for("{% for row in rows %}{{ row.a }}")
 
     assert schema["properties"] == {}
+
+
+def test_a_number_maps_to_the_json_schema_number_type():
+    schema = schema_for("{{ subtotal - discount }}")
+
+    assert schema["properties"]["subtotal"] == {"type": "number"}
+    assert schema["properties"]["discount"] == {"type": "number"}

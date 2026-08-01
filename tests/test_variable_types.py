@@ -1,4 +1,4 @@
-from jinjutsu.types import BooleanNode, ListNode, ObjectNode, StringNode
+from jinjutsu.types import BooleanNode, ListNode, NumberNode, ObjectNode, StringNode
 
 from .helpers import variables_for
 
@@ -82,6 +82,75 @@ def test_truthiness_guard_refines_into_an_object():
     variables = variables_for(text)
 
     assert variables["section"] == ObjectNode(properties={"title": StringNode()})
+
+
+def test_operators_a_string_cannot_survive_make_a_number():
+    for text in ("{{ v - 1 }}", "{{ v / 2 }}", "{{ v // 2 }}", "{{ v ** 2 }}", "{{ -v }}"):
+        assert variables_for(text) == {"v": NumberNode()}, text
+
+
+def test_multiplication_makes_every_operand_a_number():
+    # "a" * "b" raises, so both operands being strings is not a reading that exists
+    assert variables_for("{{ a * b }}") == {"a": NumberNode(), "b": NumberNode()}
+    assert variables_for("{{ v * 2 }}") == {"v": NumberNode()}
+
+
+def test_a_repeated_string_literal_makes_its_count_a_number():
+    assert variables_for('{{ "-" * width }}') == {"width": NumberNode()}
+    assert variables_for('{{ width * "-" }}') == {"width": NumberNode()}
+
+
+def test_ambiguous_operators_need_a_numeric_literal_to_mean_arithmetic():
+    assert variables_for("{{ v + 1 }}") == {"v": NumberNode()}
+    assert variables_for("{{ v % 2 }}") == {"v": NumberNode()}
+
+
+def test_ambiguous_operators_on_two_names_stay_strings():
+    # {{ a + b }} is as likely to be concatenation, and {{ a % b }} printf, so neither is claimed
+    assert variables_for("{{ a + b }}") == {"a": StringNode(), "b": StringNode()}
+    assert variables_for("{{ a % b }}") == {"a": StringNode(), "b": StringNode()}
+
+
+def test_a_string_literal_operand_keeps_the_other_side_a_string():
+    assert variables_for('{{ v + "x" }}') == {"v": StringNode()}
+    assert variables_for('{{ "%s" % v }}') == {"v": StringNode()}
+
+
+def test_the_explicit_concat_operator_is_not_arithmetic():
+    assert variables_for("{{ v ~ w }}") == {"v": StringNode(), "w": StringNode()}
+
+
+def test_ordered_comparison_against_a_number_is_a_number():
+    assert variables_for("{% if v > 5 %}x{% endif %}") == {"v": NumberNode()}
+    assert variables_for("{% if 5 < v %}x{% endif %}") == {"v": NumberNode()}
+
+
+def test_ordered_comparison_without_a_numeric_literal_stays_a_string():
+    # strings compare lexicographically, so neither of these says anything about shape
+    assert variables_for("{% if v > w %}x{% endif %}") == {"v": StringNode(), "w": StringNode()}
+    assert variables_for('{% if v > "m" %}x{% endif %}') == {"v": StringNode()}
+
+
+def test_arithmetic_wins_over_being_printed_or_guarded():
+    assert variables_for("{{ v }}{{ v - 1 }}") == {"v": NumberNode()}
+    assert variables_for("{{ v - 1 }}{{ v }}") == {"v": NumberNode()}
+    assert variables_for("{% if v %}{{ v - 1 }}{% endif %}") == {"v": NumberNode()}
+
+
+def test_arithmetic_types_a_field_at_any_depth():
+    text = "{% for r in rows %}{{ r.n * 2 }}{% endfor %}"
+
+    assert variables_for(text) == {"rows": ListNode(items=ObjectNode(properties={"n": NumberNode()}))}
+
+
+def test_arithmetic_nested_inside_a_comparison_is_still_read():
+    assert variables_for("{% if count + 1 > 5 %}x{% endif %}") == {"count": NumberNode()}
+
+
+def test_arithmetic_does_not_overwrite_a_container():
+    text = "{{ a.b }}{{ a + 1 }}"
+
+    assert variables_for(text) == {"a": ObjectNode(properties={"b": StringNode()})}
 
 
 def test_boolean_operators_in_condition_extract_boolean_operands():
