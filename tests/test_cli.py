@@ -134,13 +134,33 @@ def test_the_empty_message_only_mentions_the_sections_asked_for(tmp_path, capsys
     template = write(tmp_path, "plain text")
 
     main([template, "--warnings"])
-    assert capsys.readouterr().out == "Nothing wrong\n"
+    assert capsys.readouterr().out == "Template parsed successfully with no warnings\n"
 
     main([template, "--tree"])
-    assert capsys.readouterr().out == "No variables\n"
+    assert capsys.readouterr().out == "No variables parsed from template. Warnings:\n"
 
     main([template])
-    assert capsys.readouterr().out == "No variables and nothing wrong\n"
+    assert capsys.readouterr().out == "Template parsed successfully but no variables found\n"
+
+
+def test_an_empty_tree_prints_the_warnings_below_the_same_message(tmp_path, capsys):
+    template = write(tmp_path, "{ % if alpha %}x{% endif %}")
+
+    assert main([template, "--tree"]) == 1
+
+    out = capsys.readouterr().out
+    assert out.startswith("No variables parsed from template. Warnings:\n\n")
+    assert "Extra space after" in out
+
+
+def test_every_warning_is_printed_when_the_tree_is_empty(tmp_path, capsys):
+    template = write(tmp_path, "{ % if alpha %}x{% endif %}\n{ % if beta %}y{% endif %}")
+
+    main([template, "--tree"])
+
+    out = capsys.readouterr().out
+    assert "Line 1:" in out
+    assert "Line 2:" in out
 
 
 def test_several_sections_are_labelled_with_dividers(tmp_path, capsys):

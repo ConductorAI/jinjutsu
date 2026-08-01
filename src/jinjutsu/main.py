@@ -19,12 +19,6 @@ TEMPLATE_MARKERS = ("{{", "}}", "{%", "%}", "{#", "#}")
 SECTIONS = ("warnings", "tree", "schema")
 DEFAULT_SECTIONS = ("warnings", "tree")
 DIVIDER_WIDTH = 64
-# What to say when the requested sections all came back empty. A schema always prints, so it is absent
-NOTHING_TO_SAY = {
-    ("warnings", "tree"): "No variables and nothing wrong",
-    ("warnings",): "Nothing wrong",
-    ("tree",): "No variables",
-}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,8 +82,14 @@ def _print_text(label: str, report: TemplateReport, sections: tuple[str, ...], *
         print("\n\n".join(f"{f'===== {name} '.ljust(DIVIDER_WIDTH, '=')}\n{body}" for name, body in blocks))
     elif blocks:
         print(blocks[0][1])
-    elif not report.diagnostics:
-        print(NOTHING_TO_SAY[sections])
+    elif "tree" not in sections:
+        print("Template parsed successfully with no warnings")
+    elif "warnings" in sections:
+        print("Template parsed successfully but no variables found")
+    else:
+        # A lone --tree hid the warnings, so print them here rather than exiting 1 in silence
+        empty = "No variables parsed from template. Warnings:"
+        print("\n".join([empty, "", *report.diagnostics]) if report.diagnostics else empty)
 
 
 if __name__ == "__main__":

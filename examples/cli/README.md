@@ -91,7 +91,7 @@ Nothing wrong
 
 ```sh
 $ jinjutsu "hi {{ variable + 1 }}"
-variable            number
+variable  number
 ```
 
 Quote it — an unquoted `{{ ... }}` is brace expansion in bash and zsh.
