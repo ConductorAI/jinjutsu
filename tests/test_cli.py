@@ -5,6 +5,8 @@ import pytest
 
 from jinjutsu.main import main
 
+from .helpers import docx_bytes, paragraph
+
 
 def write(tmp_path, text, name="template.jinja"):
     path = tmp_path / name
@@ -213,14 +215,23 @@ def test_a_missing_file_exits_two_without_analyzing(tmp_path, capsys):
     assert captured.out == ""
 
 
-def test_a_docx_is_reported_as_unreadable_rather_than_raising(tmp_path, capsys):
+def test_a_docx_is_extracted_and_analyzed_directly(tmp_path, capsys):
     path = tmp_path / "report.docx"
-    path.write_bytes(b"PK\x03\x04\x80\x81\x82")  # A .docx is a zip, so it never decodes as text
+    path.write_bytes(docx_bytes(paragraph("Hello {{ title }}")))
+
+    assert main([str(path)]) == 0
+
+    assert "title  string" in capsys.readouterr().out
+
+
+def test_a_fake_docx_that_is_not_a_zip_is_reported_rather_than_raising(tmp_path, capsys):
+    path = tmp_path / "report.docx"
+    path.write_bytes(b"PK\x03\x04\x80\x81\x82")
 
     assert main([str(path)]) == 2
 
     captured = capsys.readouterr()
-    assert f"Error: {path}\n  Problem: Document is a .docx file, not a text file" in captured.err
+    assert f"Error: {path}\n  Problem: Not a Word document" in captured.err
     assert captured.out == ""
 
 

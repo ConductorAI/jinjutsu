@@ -261,14 +261,22 @@ one problem and only then discovered the next.
 
 ## Support for `docxtpl`
 
-If you aren't working with docx files then this section is irrelevant, and you don't need to know what docxtpl is. If you are and would like to render custom Word elements such as a tables based on template values, read more about how to do this with docxtpl here: https://docxtpl.readthedocs.io/en/latest/
+If you aren't working with docx files then this section is irrelevant, and you don't need to know what docxtpl is. If you are and would like to render custom Word elements such as tables based on template values, read more about how to do this with docxtpl here: https://docxtpl.readthedocs.io/en/latest/
 
 As a quick primer, docxtpl is effectively a layer built on top of jinja — jinja does all the
 rendering, docxtpl gets the text into and out of the `.docx`. In addition to your own jinja tags you
 get a handful of built-in **tag prefixes** such as `tr` and `tc`, which tell docxtpl that a tag
 governs the table row or cell around it rather than just the text between the braces.
 
-**A `.docx` is not an input.** This package takes template *text*, so you will need copy the docx file's text and pass that into our validator.
+**A `.docx` can be passed directly.** The CLI extracts the document's template text itself — paragraphs,
+tables, headers, footers and textboxes, in document order — and analyzes that. As a library the same
+extraction is one call away:
+
+```python
+from jinjutsu import analyze_jinja_template, extract_docx_text
+
+report = analyze_jinja_template(extract_docx_text("invoice.docx"))
+```
 
 ### What that buys, end to end
 
@@ -320,8 +328,8 @@ PAID
 
 One real table row per line item, the tag-only rows gone, and `PAID` there because `paid` was true.
 
-[examples/docx](examples/docx) is the whole workflow as runnable scripts — extracting the text,
-checking it, and rendering it with docxtpl — plus the prefixes in more detail.
+[examples/docx](examples/docx) is the whole workflow as runnable scripts — checking a document, then
+rendering it with docxtpl — plus the prefixes in more detail.
 
 ## Performance
 
@@ -461,6 +469,7 @@ Each `checks/` module is named for **what is wrong**, not for what it reads.
 | `checks/parser.py`      | Jinja's own parse error, reworded                                                     |
 | `checks/objects.py`     | an object or list is printed directly                                                 |
 | `utils/ast_utils.py`    | reading a Jinja AST node                                                              |
+| `utils/docx_utils.py`   | extracting a Word document's template text, so a `.docx` can be passed directly       |
 | `utils/docxtpl_utils.py`| parsing, and rewriting docxtpl's tag syntax                                           |
 | `utils/string_utils.py` | wording a warning, blanking out comments                                              |
 | `utils/tag_utils.py`    | `TemplateText`, the views every check shares, including every Jinja tag in order       |

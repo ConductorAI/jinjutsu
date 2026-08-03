@@ -100,6 +100,5 @@ Quote it — an unquoted `{{ ... }}` is brace expansion in bash and zsh.
 
 `0` clean, `1` at least one diagnostic, `2` an argument that is neither a readable file nor a template.
 
-A `.docx` counts as unreadable — extract its text first and pass that, or pass the text inline.
-[examples/docx](../docx) walks that through end to end, and shows what the CLI says if you point it at
-a document by mistake.
+A `.docx` is read directly — the CLI extracts its template text before analyzing, so
+`jinjutsu invoice.docx` works as-is. [examples/docx](../docx) walks that workflow end to end.

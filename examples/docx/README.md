@@ -12,24 +12,22 @@ docxtpl.
 table and a `{%p if %}` block. `client.docx` has a real mistake, `{{ client.items }}` colliding with a
 built-in method.
 
-| step                     | takes            |                                                     |
-| ------------------------ | ---------------- | --------------------------------------------------- |
-| `step1_extract_text.py`  | a `.docx`        | prints its template text, walking paragraphs **and** tables in order |
-| `step2_analyze.py`       | a `.docx`        | extract + analyze in one call — the diagnostics and the schema |
-| `step3_render.py`        | a `.docx`        | renders it with docxtpl to `<name>_rendered.docx`     |
+| script        | takes     |                                                                 |
+| ------------- | --------- | --------------------------------------------------------------- |
+| `analyze.py`  | a `.docx` | extract + analyze in one call — the diagnostics and the schema  |
+| `render.py`   | a `.docx` | renders it with docxtpl to `<name>_rendered.docx`               |
 
-Each step takes the file to work on, so point them at either sample:
+Each script takes the file to work on, so point them at either sample:
 
 ```sh
 $ uv sync
-$ uv run python examples/docx/step1_extract_text.py examples/docx/samples/invoice.docx
-$ uv run python examples/docx/step2_analyze.py examples/docx/samples/invoice.docx
-$ uv run python examples/docx/step3_render.py examples/docx/samples/invoice.docx
+$ uv run python examples/docx/analyze.py examples/docx/samples/invoice.docx
+$ uv run python examples/docx/render.py examples/docx/samples/invoice.docx
 ```
 
-Swap in `client.docx` to watch step 2 report a real mistake — that is the only difference between the
-two runs. Only `step1_extract_text.py` guards its body with `if __name__ == "__main__"`, because step 2
-imports it; the other two run top to bottom.
+Swap in `client.docx` to watch `analyze.py` report a real mistake — that is the only difference between
+the two runs. Each script is a few lines: `analyze.py` calls the package's `extract_docx_text` and
+`analyze_jinja_template`, `render.py` is docxtpl itself.
 
 ## How docxtpl works
 
@@ -159,28 +157,51 @@ different things, and it is worth being clear about why:
 
 - **Analysis reads tags, and a tag is plain text.** Whether `invoice.lines` is a list of objects is
   decided entirely by the characters `{%tr for line in invoice.lines %}`. Fonts, styles and table
-  borders say nothing about the shape of the context, so extracted text is all jinjutsu ever needs —
-  and a `.docx` is not an input to it at all.
+  borders say nothing about the shape of the context, so the template text is all analysis needs —
+  point jinjutsu at a `.docx` and extracting that text is the first thing it does.
 - **Rendering has to produce a Word file, so the formatting *is* the payload.** docxtpl does not
   discard the styles, tables, headers and images — it carries every one of them through to the output
   and substitutes only the tags. Hand it text and there would be nothing to build a document from.
   `{%tr for %}` would also have no `<w:tr>` element to repeat, and `{{r }}` no run to replace.
 
-So the steps below feed jinjutsu *text*, while [step 3](#2-render-it) hands docxtpl the original
-`.docx`. Pointing the CLI at the document instead is the common slip, and it says so:
+So the CLI takes the document directly, and analyzes the text it extracts:
 
 ```sh
 $ jinjutsu examples/docx/samples/invoice.docx
-Error: examples/docx/samples/invoice.docx
-  Problem: Document is a .docx file, not a text file
-  Fix:     Extract text into a .txt file and try again
-  Reason:  We can't directly read docx files
+invoice         object
+|-- number      string
+|-- lines       list of objects
+|   |-- desc    string
+|   `-- amount  string
+`-- paid        boolean
 ```
 
-So extract the text first:
+No warnings, and the tree is the context to build: `lines` is a list of objects because `{%tr for %}`
+is a loop once the prefix is blanked, `paid` is a boolean because `{%p if %}` is a truthiness test.
+The same call on `client.docx` exits 1 and names its mistake:
 
 ```sh
-$ uv run python examples/docx/step1_extract_text.py examples/docx/samples/invoice.docx
+$ jinjutsu examples/docx/samples/client.docx
+===== warnings =================================================
+Line 2: Field 'items' collides with a built-in method
+  Found: {{ client.items }}
+  Fix:   {{ client['items'] }}
+  Reason: Jinja reads '.items' as the value's own method, so the document renders the method instead of your value. Use bracket syntax.
+  Your order: {{ client.items }}
+
+===== tree =====================================================
+client     object
+|-- name   string
+`-- items  string
+```
+
+Line 2 is a line of the *extracted text*, not of the Word document — formatting is gone by the time
+there are lines to count. `extract_docx_text` gives that text, so a line number has something to
+point at:
+
+```sh
+$ uv run python -c "from jinjutsu import extract_docx_text
+print(extract_docx_text('examples/docx/samples/invoice.docx'))"
 Invoice {{ invoice.number }}
 {%tr for line in invoice.lines %}
 {{r line.desc }}	{{ line.amount }}
@@ -190,7 +211,12 @@ PAID
 {%p endif %}
 ```
 
-**Walk tables, not just paragraphs.** The obvious one-liner —
+`analyze.py` is the same check as a library call —
+`analyze_jinja_template(extract_docx_text(path))` — printing the diagnostics and the JSON Schema.
+
+### What the extraction walks
+
+**Tables, not just paragraphs.** The obvious one-liner —
 `"\n".join(p.text for p in doc.paragraphs)` — reads only top-level paragraphs, and as the table
 above shows, docxtpl's loops live inside table cells. On this very document it silently drops the
 loop, and `invoice.lines` never appears in the schema:
@@ -205,7 +231,7 @@ PAID
 {%p endif %}
 ```
 
-`step1_extract_text.py` walks `word/document.xml` itself, emitting a line per paragraph and per table
+`extract_docx_text` walks `word/document.xml` itself, emitting a line per paragraph and per table
 row with the cells tab-separated — whitespace is insignificant inside a Jinja tag, and one row per line
 keeps a reported line number pointing at the right row. It needs no python-docx: a `.docx` is a zip of
 XML, so `zipfile` and `ElementTree` are enough.
@@ -221,46 +247,9 @@ tag in a textbox                boxed              boxed
 tag in a header / footer        hdr, ftr           hdr, ftr
 ```
 
-Now analyze — pass the text to the CLI, or redirect to a file for CI:
-
-```sh
-$ text="$(uv run python examples/docx/step1_extract_text.py examples/docx/samples/invoice.docx)"
-$ jinjutsu "$text"
-invoice         object
-|-- number      string
-|-- lines       list of objects
-|   |-- desc    string
-|   `-- amount  string
-`-- paid        boolean
-```
-
-No warnings, and the tree is the context to build: `lines` is a list of objects because `{%tr for %}`
-is a loop once the prefix is blanked, `paid` is a boolean because `{%p if %}` is a truthiness test.
-The same pipeline on `client.docx` exits 1 and names its mistake:
-
-```sh
-$ text="$(uv run python examples/docx/step1_extract_text.py examples/docx/samples/client.docx)"
-$ jinjutsu "$text"
-===== warnings =================================================
-Line 2: Field 'items' collides with a built-in method
-  Found: {{ client.items }}
-  Fix:   {{ client['items'] }}
-  Reason: Jinja reads '.items' as the value's own method, so the document renders the method instead of your value. Use bracket syntax.
-  Your order: {{ client.items }}
-
-===== tree =====================================================
-client     object
-|-- name   string
-`-- items  string
-```
-
-Line 2 is a line of the *extracted text*, not of the Word document — formatting is gone by the time
-there are lines to count. `step2_analyze.py` is the same check as a library call, printing the
-diagnostics and the JSON Schema.
-
 ## 2. Render it
 
-`step3_render.py` builds the context the tree above describes and hands it to docxtpl:
+`render.py` builds the context the tree above describes and hands it to docxtpl:
 
 ```python
 context = {
@@ -287,9 +276,10 @@ because the *data* says so, formatting no template edit could express. Run it an
 back with the same extractor:
 
 ```sh
-$ uv run --with docxtpl python examples/docx/step3_render.py examples/docx/samples/invoice.docx
+$ uv run python examples/docx/render.py examples/docx/samples/invoice.docx
 wrote examples/docx/samples/invoice_rendered.docx
-$ uv run python examples/docx/step1_extract_text.py examples/docx/samples/invoice_rendered.docx
+$ uv run python -c "from jinjutsu import extract_docx_text
+print(extract_docx_text('examples/docx/samples/invoice_rendered.docx'))"
 Invoice INV-0042
 Design	$1,200.00
 Development	$3,400.00

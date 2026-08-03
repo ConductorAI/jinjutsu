@@ -11,22 +11,22 @@ would under-report the context: the template would need a name nothing told you 
 render blank with no error.
 """
 
-import sys
 import zipfile
+from pathlib import Path
 from xml.etree import ElementTree
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 BODY = "word/document.xml"
 
 
-def extract_text(path: str) -> str:
+def extract_docx_text(path: str | Path) -> str:
+    """Raises BadZipFile, ParseError or KeyError when the file is not a Word document"""
     with zipfile.ZipFile(path) as archive:
-        names = archive.namelist()
-        parts = [BODY] + sorted(n for n in names if n.startswith(("word/header", "word/footer")))
+        # A zip without a body is not a document, so reading it unguarded raises rather than yielding ""
+        parts = [BODY] + sorted(n for n in archive.namelist() if n.startswith(("word/header", "word/footer")))
         lines = []
         for part in parts:
-            if part in names:
-                lines.extend(_lines(ElementTree.fromstring(archive.read(part))))
+            lines.extend(_lines(ElementTree.fromstring(archive.read(part))))
     return "\n".join(lines)
 
 
@@ -70,7 +70,3 @@ def _text_of(element: ElementTree.Element) -> str:
         else:
             parts.append(_text_of(child))
     return "".join(parts)
-
-
-if __name__ == "__main__":
-    print(extract_text(sys.argv[1]))

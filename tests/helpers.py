@@ -1,12 +1,31 @@
+import io
+import zipfile
+
 from jinja2 import Environment, TemplateSyntaxError
 
 from jinjutsu import analyze_jinja_template
 from jinjutsu.analyze import _build_variable_tree
 from jinjutsu.utils.docxtpl_utils import normalize_docxtpl_prefixes
 
+DOCX_XMLNS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+
 
 def warnings_for(text: str) -> list[str]:
     return analyze_jinja_template(text).diagnostics
+
+
+def docx_bytes(body_xml: str, parts: dict[str, str] | None = None) -> bytes:
+    "A minimal .docx: word/document.xml wrapping body_xml, plus any extra parts given as complete XML"
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", f"<w:document {DOCX_XMLNS}><w:body>{body_xml}</w:body></w:document>")
+        for name, xml in (parts or {}).items():
+            archive.writestr(name, xml)
+    return buffer.getvalue()
+
+
+def paragraph(text: str) -> str:
+    return f"<w:p><w:r><w:t>{text}</w:t></w:r></w:p>"
 
 
 def schema_for(text: str) -> dict:

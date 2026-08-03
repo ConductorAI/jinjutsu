@@ -1,5 +1,5 @@
 """
-Command line entry point: jinjutsu template.jinja, or jinjutsu "{{ inline.text }}"
+Command line entry point: jinjutsu template.jinja, jinjutsu invoice.docx, or jinjutsu "{{ inline.text }}"
 
 Prints what is wrong with the template first, then the schema as the tree README.md documents
 Exits 1 when a template has diagnostics, so the command works as a check in CI or a pre-commit hook
@@ -9,10 +9,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from xml.etree.ElementTree import ParseError
+from zipfile import BadZipFile
 
 from .analyze import analyze_jinja_template
 from .schema import render_tree
 from .types import TemplateReport
+from .utils.docx_utils import extract_docx_text
 
 INLINE_LABEL = "<string>"  # Stands in for the filename when the template came from the command line
 TEMPLATE_MARKERS = ("{{", "}}", "{%", "%}", "{#", "#}")
@@ -45,7 +48,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="jinjutsu", description="Report what data a Jinja template needs and what is wrong with it"
     )
-    parser.add_argument("templates", nargs="+", metavar="TEMPLATE", help="template files, or template text itself")
+    parser.add_argument(
+        "templates", nargs="+", metavar="TEMPLATE", help="template files, .docx documents, or template text itself"
+    )
     parser.add_argument("--warnings", action="store_true", help="print what is wrong with the template")
     parser.add_argument("--tree", action="store_true", help="print the data it needs as an indented tree")
     parser.add_argument("--schema", action="store_true", help="print the data it needs as a JSON Schema")
@@ -58,16 +63,18 @@ def _read(template: str) -> tuple[str, str] | str:
     path = Path(template)
     if path.is_file():  # Swallows the OSError a whole template passed as a path would otherwise raise
         try:
+            if path.suffix.lower() == ".docx":
+                return str(path), extract_docx_text(path)
             # Word writes a BOM often enough that utf-8-sig is the safer read for the templates this targets
             return str(path), path.read_text(encoding="utf-8-sig")
+        except (BadZipFile, ParseError, KeyError):
+            return _error_to_string(
+                template,
+                problem="Not a Word document",
+                fix="Re-save it as .docx from Word, or extract its text and pass that",
+                reason="A .docx is a zip archive of XML, and this file does not read as one",
+            )
         except UnicodeDecodeError:
-            if path.suffix.lower() == ".docx":
-                return _error_to_string(
-                    template,
-                    problem="Document is a .docx file, not a text file",
-                    fix="Extract text into a .txt file and try again",
-                    reason="We can't directly read docx files",
-                )
             return _error_to_string(
                 template,
                 problem="Not UTF-8 text",
