@@ -389,6 +389,9 @@ what decides which names a template actually requires.
 
 ## Known limitations
 
+<details>
+<summary><b>The full list</b> (12 cases, each deliberate or documented)</summary>
+
 - **Nothing is marked required, on purpose.** Whether a name may be absent is a property of each
   *place* it is used, not of the name: `{{ name | default("x") }}{{ name }}` is optional at one site
   and mandatory at the other, and a single flag per name cannot say both. It also depends on the
@@ -434,7 +437,13 @@ what decides which names a template actually requires.
   docx extraction produces enough incidental whitespace that style rules fire constantly on valid
   templates.
 
-## Resources                         |
+</details>
+
+## Resources
+
+- [Jinja template designer documentation][jinja]
+- [docxtpl documentation][docxtpl]
+- [jinjaninja][jinjaninja]
 
 [jinja]: https://jinja.palletsprojects.com/en/stable/templates/
 [docxtpl]: https://docxtpl.readthedocs.io
