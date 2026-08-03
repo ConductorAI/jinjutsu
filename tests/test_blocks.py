@@ -25,7 +25,8 @@ def test_horizontal_merge_outside_a_loop_is_reported():
 
 
 def test_cell_merge_inside_a_docxtpl_loop_is_not_reported():
-    text = "{%tr for r in rows %}{% vm %}{% hm %}{{ r.name }}{%tr endfor %}"
+    # One tag per row, the only shape a real document can have
+    text = "{%tr for r in rows %}\n{% vm %}{% hm %}{{ r.name }}\n{%tr endfor %}"
 
     warnings = warnings_for(text)
 

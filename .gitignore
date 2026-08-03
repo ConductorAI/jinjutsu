@@ -22,3 +22,6 @@ env/
 
 # Local tooling config
 .claude/settings.local.json
+
+# Generated example output
+*_rendered.docx

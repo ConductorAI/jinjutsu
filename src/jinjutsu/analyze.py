@@ -8,7 +8,11 @@ The shapes both halves return are defined in types.py
 
 from jinja2 import Environment, TemplateAssertionError, TemplateSyntaxError, meta, nodes
 
-from .checks.blocks import check_merge_tags_outside_loops, check_mismatched_tags
+from .checks.blocks import (
+    check_merge_tags_outside_loops,
+    check_mismatched_tags,
+    check_prefixed_tags_share_an_element,
+)
 from .checks.delimiters import check_malformed_tags, check_misplaced_statement_delimiters
 from .checks.names import check_builtin_method_attributes, check_hyphenated_variables
 from .checks.objects import check_no_objects_printed_directly
@@ -50,6 +54,7 @@ def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[str
     warnings.extend(check_hyphenated_variables(text.tags))
     warnings.extend(check_builtin_method_attributes(text.tags))
     warnings.extend(check_merge_tags_outside_loops(text.tags))
+    warnings.extend(check_prefixed_tags_share_an_element(text.source_lines))
 
     # The same mistake twice on one line reads as one problem, and the UI keys each warning by its text
     return list(dict.fromkeys(warnings))

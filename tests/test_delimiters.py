@@ -83,7 +83,7 @@ def test_braced_literal_without_jinja_keyword_is_not_reported():
 
 
 def test_valid_tags_are_not_flagged_as_misplaced_delimiters():
-    text = "{% if a %}{{ b }}{%- endif %}{%tr for r in rows %}{{r r.name }}{%tr endfor %}"
+    text = "{% if a %}{{ b }}{%- endif %}\n{%tr for r in rows %}\n{{r r.name }}\n{%tr endfor %}"
 
     warnings = warnings_for(text)
 

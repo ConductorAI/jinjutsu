@@ -44,7 +44,7 @@ not what it set out to catch — it is in the table because it is the closest th
 on PyPI, and it is the only one of the three that checks style at all.
 
 <details open>
-<summary><b>Full case-by-case comparison</b> (36 cases)</summary>
+<summary><b>Full case-by-case comparison</b> (38 cases)</summary>
 
 **Legend** — ✅ detected, with a message naming the mistake · ⚠️ detected, but only a raw parser
 message · ❌ no finding, template reported clean
@@ -86,6 +86,8 @@ message · ❌ no finding, template reported clean
 | `{% vm %}` `{% hm %}` `{% colspan n %}` `{% cellbg c %}`, used well | ✅ ignored, arguments extracted             | ❌ false positive — unknown tag `'tr'`  | ❌ false positive    |
 | `{% cellbg %}` with no argument                                    | ⚠️ generic                                   | ⚠️ unknown tag `'cellbg'`                | ❌                   |
 | `{% vm %}` / `{% hm %}` outside a loop                             | ✅ names the tag and the fix                | ⚠️ unknown tag `'vm'`                    | ❌                   |
+| Two prefixed tags in one paragraph / row / cell                    | ✅ names the element and the fix             | ⚠️ unknown tag `'p'` — the prefix, not the clash | ❌                   |
+| Prefixed tag beside text in one element — renders, content lost     | ✅ names what gets deleted                   | ⚠️ unknown tag `'p'` — the prefix, not the loss | ❌                   |
 | **Robustness** (docx authoring artifacts)                          |                                             |                                         |                      |
 | Tag split across paragraphs — variable extraction                  | ✅ unaffected, shape still inferred         | ✅ parses                               | ❌                   |
 | Tag split across paragraphs — break at a token boundary            | ✅ folds the break, reports normally        | ❌                                      | ❌                   |
@@ -257,7 +259,7 @@ follows one rule: **a check silences Jinja's error only when both are looking at
 This matters. A mismatched tag used to hide a genuine expression error further down, so authors fixed
 one problem and only then discovered the next.
 
-## docxtpl support
+## Support for `docxtpl`
 
 If you aren't working with docx files then this section is irrelevant, and you don't need to know what docxtpl is. If you are and would like to render custom Word elements such as a tables based on template values, read more about how to do this with docxtpl here: https://docxtpl.readthedocs.io/en/latest/
 
@@ -266,7 +268,7 @@ rendering, docxtpl gets the text into and out of the `.docx`. In addition to you
 get a handful of built-in **tag prefixes** such as `tr` and `tc`, which tell docxtpl that a tag
 governs the table row or cell around it rather than just the text between the braces.
 
-**A `.docx` is not an input.** This package takes template *text*, so you will need extract the docx file's text and pass that into our validator.
+**A `.docx` is not an input.** This package takes template *text*, so you will need copy the docx file's text and pass that into our validator.
 
 ### What that buys, end to end
 
@@ -282,11 +284,6 @@ Invoice {{ invoice.number }}
 PAID
 {%p endif %}
 ```
-
-A prefixed statement tag has to sit **alone** in the element it names, because docxtpl replaces that
-whole element with the bare tag. Writing the condition on one line as
-`{%p if invoice.paid %}PAID{%p endif %}` analyses fine here but dies at render time with Jinja's
-`Encountered unknown tag 'endif'` — the paragraph the first tag consumed took the `if` with it.
 
 **Without docxtpl support**, Jinja rejects `{%tr %}` as an unknown tag, and a parse failure means no
 shapes at all. The author is told their correctly written template is broken:
@@ -312,31 +309,7 @@ No warnings, because there is nothing wrong with the template. `lines` is a list
 `{%tr for %}` is a loop once the prefix is gone, and `paid` is a boolean because `{%p if %}` is a
 truthiness test. Both facts are unreachable if the parse fails.
 
-Then to render the template, hand docxtpl a context of exactly that shape. `desc` is a `RichText`
-because the template reads it with `{{r }}`, which replaces the run's XML — a plain string there
-vanishes from the document silently:
-
-```python
-from docxtpl import DocxTemplate, RichText
-
-context = {
-    "invoice": {
-        "number": "INV-0042",
-        "lines": [
-            {"desc": RichText("Design", bold=True), "amount": "$1,200.00"},
-            {"desc": RichText("Development"), "amount": "$3,400.00"},
-        ],
-        "paid": True,
-    }
-}
-
-template = DocxTemplate("invoice.docx")
-template.render(context)
-template.save("invoice_rendered.docx")
-```
-
-`invoice_rendered.docx` is a normal Word file — every style, font and header intact, only the tags
-replaced. Reading its text back:
+Hand docxtpl a context of that shape and the finished document reads:
 
 ```
 Invoice INV-0042
@@ -345,11 +318,10 @@ Development  $3,400.00
 PAID
 ```
 
-The two `{%tr %}` rows became one real table row per line item and the tag-only rows are gone, the
-first description is bold because the *data* said so, and `PAID` survived because `paid` was true —
-set it to `False` and that paragraph disappears entirely.
+One real table row per line item, the tag-only rows gone, and `PAID` there because `paid` was true.
 
-[examples/docx](examples/docx) is this whole workflow as runnable scripts.
+[examples/docx](examples/docx) is the whole workflow as runnable scripts — extracting the text,
+checking it, and rendering it with docxtpl — plus the prefixes in more detail.
 
 ## Performance
 
@@ -485,7 +457,7 @@ Each `checks/` module is named for **what is wrong**, not for what it reads.
 | `variable_tree.py`      | `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
 | `checks/delimiters.py`  | the braces are malformed, so Jinja never sees a tag at all                            |
 | `checks/names.py`       | a name inside a tag will not resolve the way it is written                            |
-| `checks/blocks.py`      | block structure is wrong — counts do not match, or a tag needs an enclosing loop      |
+| `checks/blocks.py`      | block structure is wrong — counts do not match, a tag needs an enclosing loop, or two docxtpl prefixed tags share one Word element |
 | `checks/parser.py`      | Jinja's own parse error, reworded                                                     |
 | `checks/objects.py`     | an object or list is printed directly                                                 |
 | `utils/ast_utils.py`    | reading a Jinja AST node                                                              |

@@ -47,7 +47,7 @@ def test_invalid_name_after_a_dot_reports_the_variable_name_guidance():
 
 
 def test_docxtpl_paragraph_conditional_is_not_a_syntax_error():
-    text = "{%p if strategic_requirement_1 or strategic_requirement_2 %}{{ strategic_requirement_1 }}{%p endif %}"
+    text = "{%p if strategic_requirement_1 or strategic_requirement_2 %}\n{{ strategic_requirement_1 }}\n{%p endif %}"
 
     warnings = warnings_for(text)
 
@@ -64,7 +64,9 @@ def test_docxtpl_prefixed_variable_is_not_a_syntax_error():
 
 def test_docxtpl_table_tags_are_not_syntax_errors():
     text = (
-        "{%tr for r in rows %}{% vm %}{% hm %}{% colspan col_count %}{% cellbg row_color %}{{ r.name }}{%tr endfor %}"
+        "{%tr for r in rows %}\n"
+        "{% vm %}{% hm %}{% colspan col_count %}{% cellbg row_color %}{{ r.name }}\n"
+        "{%tr endfor %}"
     )
 
     warnings = warnings_for(text)

@@ -26,6 +26,10 @@ jinjutsu = "jinjutsu.main:main"
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
 
+# Installed by a bare `uv sync`, unlike an extra. docxtpl is for examples/docx and pulls python-docx in
+[dependency-groups]
+dev = ["jinjutsu[dev]", "docxtpl>=0.16"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/jinjutsu"]
 
