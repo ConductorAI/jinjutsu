@@ -248,7 +248,7 @@ one problem and only then discovered the next.
 
 ## Support for `docxtpl`
 
-If you aren't working with docx files then this section is irrelevant, and you don't need to know what docxtpl is. If you are and would like to render custom Word elements such as tables based on template values, read more about how to do this with docxtpl here: https://docxtpl.readthedocs.io/en/latest/
+If you're not working with docx files then this section is irrelevant, and you don't need to know what docxtpl is. If you are and would like to render custom Word elements such as tables based on template values, read more about how to do this with docxtpl here: https://docxtpl.readthedocs.io/en/latest/
 
 As a quick primer, docxtpl is effectively a layer built on top of jinja — jinja does all the
 rendering, docxtpl gets the text into and out of the `.docx`. In addition to your own jinja tags you
@@ -267,8 +267,7 @@ report = analyze_jinja_template(extract_docx_text("invoice.docx"))
 
 ### What that buys, end to end
 
-A human author writes `invoice.docx` in Word. Here `{%tr %}` is the docxtpl prefix that makes the loop
-repeat the whole table row, and `{%p %}` makes the condition govern whole paragraphs:
+A human author writes `invoice.docx` in Word. Here `{%tr %}` is the docxtpl prefix that makes the loop repeat the whole table row, and `{%p %}` makes the condition govern whole paragraphs:
 
 ```
 Invoice {{ invoice.number }}
@@ -280,8 +279,7 @@ PAID
 {%p endif %}
 ```
 
-**Without docxtpl support**, Jinja rejects `{%tr %}` as an unknown tag, and a parse failure means no
-shapes at all. The author is told their correctly written template is broken:
+**Without docxtpl support**, Jinja rejects `{%tr %}` as an unknown tag, and a parse failure means no shapes at all. The author is told their correctly written template is broken:
 
 ```
 Line 2: Check for typos or formatting issues
@@ -300,7 +298,7 @@ invoice         object
 `-- paid        boolean
 ```
 
-No warnings, because there is nothing wrong with the template. `lines` is a list of objects because
+No warnings, since nothing is wrong with the template. `lines` is a list of objects because
 `{%tr for %}` is a loop once the prefix is gone, and `paid` is a boolean because `{%p if %}` is a
 truthiness test. Both facts are unreachable if the parse fails.
 
@@ -308,15 +306,13 @@ Hand docxtpl a context of that shape and the finished document reads:
 
 ```
 Invoice INV-0042
-Design  $1,200.00
+Design       $1,200.00
 Development  $3,400.00
 PAID
 ```
 
-One real table row per line item, the tag-only rows gone, and `PAID` there because `paid` was true.
-
-[examples/docx](examples/docx) is the whole workflow as runnable scripts — checking a document, then
-rendering it with docxtpl — plus the prefixes in more detail.
+One real table row per line item, the tag-only rows gone, and `PAID` there because `paid` was true. See
+[examples/docx](examples/docx) for the whole workflow as runnable scripts — checking a document, then rendering it with docxtpl, plus info about the prefixes in more detail.
 
 ## Performance
 
@@ -424,7 +420,7 @@ Known limitations, ordered by most to least likely to be encountered:
 ## Resources
 
 - [jinja][jinja] — The syntax template authors write: tags, filters, tests and expressions. What this package parses, and what its diagnostics teach.
-- [docxtpl][docxtpl] — Syntax for rendering a Word document as a Jinja template. Covers the prefixed tags (`{%p %}`, `{%tr %}`), `RichText`, and everything else the
+- [docxtpl][docxtpl] — Syntax for rendering a Word document as a Jinja template. Covers the specific tags used to render Word elements and everything else the
   [docxtpl support](#support-for-docxtpl) section summarizes.
 - [jinjaninja][jinjaninja] — The Jinja style linter benchmarked in the
   [comparison above](#why-not-just-use-jinjas-parser).
