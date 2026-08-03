@@ -21,7 +21,7 @@ Line 2: Field 'items' collides with a built-in method
   {{ store.items }}
 ```
 
-## Why not just use Jinja's parser
+## Why not just use Jinja's parser?
 
 Jinja's messages are written for programmers, and they blame the wrong line. `Encountered unknown tag
 'endif'` on line 40 is a useless thing to show someone whose real mistake was typing `{ % if x %}` on
@@ -43,7 +43,7 @@ In fairness to [jinjaninja], it bills itself as a style enforcement tool, so cor
 not what it set out to catch — it is in the table because it is the closest thing to a Jinja linter
 on PyPI, and it is the only one of the three that checks style at all.
 
-<details open>
+<details>
 <summary><b>Full case-by-case comparison</b> (38 cases)</summary>
 
 **Legend** — ✅ detected, with a message naming the mistake · ⚠️ detected, but only a raw parser
@@ -122,7 +122,7 @@ jinjutsu TEMPLATE [TEMPLATE ...] [--warnings] [--tree] [--schema] [--all]
 
 See [examples/cli](examples/cli) for what each flag prints.
 
-## The schema
+## Schema
 
 `report.schema` is a JSON Schema for the context object the template expects. Given:
 
@@ -313,7 +313,8 @@ One real table row per line item, the tag-only rows gone, and `PAID` there becau
 [examples/docx](examples/docx) is the whole workflow as runnable scripts — checking a document, then
 rendering it with docxtpl — plus the prefixes in more detail.
 
-## Performance
+<details>
+<summary><h2>Performance</h2></summary>
 
 Wall-clock for one full `analyze_jinja_template` call against synthetic documents of the shape given,
 best of 3 runs. Both columns were measured in the same process on the same machine, so the ratios are
@@ -340,7 +341,7 @@ matters. Two rows are worth reading closely:
   everything following a tag. This package matches tags across newlines instead of per line, so all
   three one-long-line variants land within 20 ms of each other.
 
-<details open>
+<details>
 <summary><b>Where the superlinear costs are</b></summary>
 
 **An axis is one thing you can make bigger about a template.** Every cost below is a product of two
@@ -387,10 +388,10 @@ what decides which names a template actually requires.
 
 </details>
 
-## Known limitations
+</details>
 
 <details>
-<summary><b>The full list</b> (12 cases, each deliberate or documented)</summary>
+<summary><h2>Known limitations</h2></summary>
 
 - **Nothing is marked required, on purpose.** Whether a name may be absent is a property of each
   *place* it is used, not of the name: `{{ name | default("x") }}{{ name }}` is optional at one site
@@ -441,10 +442,6 @@ what decides which names a template actually requires.
 
 ## Resources
 
-- [Jinja template designer documentation][jinja]
+- [jinja][jinja]
 - [docxtpl documentation][docxtpl]
 - [jinjaninja][jinjaninja]
-
-[jinja]: https://jinja.palletsprojects.com/en/stable/templates/
-[docxtpl]: https://docxtpl.readthedocs.io
-[jinjaninja]: https://github.com/ramonsaraiva/jinjaninja
