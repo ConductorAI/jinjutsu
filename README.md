@@ -209,31 +209,13 @@ Names the template invents are never reported, since nobody supplies them: loop 
 
 ## Diagnostics
 
-`report.diagnostics` is a list of formatted strings you can show the user directly. There are two
-layouts, each built by one helper.
-
-`warning_to_string` in `utils/string_utils.py` — every warning. Labels align at one column, and
-`title`, `fix` and `reason` all read as sentences, so a list of them looks like one voice:
-
-```
-Line 4: 'a' is used as both a value and an object
-  Found: a.b
-  Fix:   Give the two uses different names        <- three spaces, aligned
-  Reason: ...                                    <- optional
-  {{ a.b }}                                      <- optional source line
-```
-
-Passing no `line_no` drops the prefix, for a count that is wrong across the whole template with no one
-line to blame. The rest of the layout is unchanged, so the two sit together in the same output:
+`report.diagnostics` is a list of formatted strings you can show the user directly. Some examples of possible warnings:
 
 ```
 Mismatched loop tags
   Found: 1 {% for %} tag(s) but 0 {% endfor %} tag(s)
   Fix:   Each {% for %} must have a corresponding {% endfor %}
 ```
-
-`_syntax_error` in `checks/parser.py` — Jinja's own message, wrapped in friendlier guidance and kept
-underneath:
 
 ```
 Line 2: Unexpected 'b' after the expression. The tag holds one expression, nothing more
@@ -452,28 +434,8 @@ what decides which names a template actually requires.
   docx extraction produces enough incidental whitespace that style rules fire constantly on valid
   templates.
 
-## Layout
+## Resources                         |
 
-Each `checks/` module is named for **what is wrong**, not for what it reads.
-
-| file                    |                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| `types.py`              | the internal `VariableNode` union, `TemplateReport`, and every other shape the modules pass around — imports nothing from the package, so it can be imported anywhere |
-| `schema.py`             | the node union rendered as JSON Schema, and that schema rendered as the CLI's tree — the only reader of the internal model |
-| `main.py`               | the CLI: which argument is a file and which is template text, and the exit code        |
-| `analyze.py`            | `analyze_jinja_template()` — the entry point, and which warnings survive               |
-| `variable_tree.py`      | `VariableTreeVisitor`, which subclasses Jinja's `NodeVisitor` and adds shape inference |
-| `checks/delimiters.py`  | the braces are malformed, so Jinja never sees a tag at all                            |
-| `checks/names.py`       | a name inside a tag will not resolve the way it is written                            |
-| `checks/blocks.py`      | block structure is wrong — counts do not match, a tag needs an enclosing loop, or two docxtpl prefixed tags share one Word element |
-| `checks/parser.py`      | Jinja's own parse error, reworded                                                     |
-| `checks/objects.py`     | an object or list is printed directly                                                 |
-| `utils/ast_utils.py`    | reading a Jinja AST node                                                              |
-| `utils/docx_utils.py`   | extracting a Word document's template text, so a `.docx` can be passed directly       |
-| `utils/docxtpl_utils.py`| parsing, and rewriting docxtpl's tag syntax                                           |
-| `utils/string_utils.py` | wording a warning, blanking out comments                                              |
-| `utils/tag_utils.py`    | `TemplateText`, the views every check shares, including every Jinja tag in order       |
-| `tests/`                | one file per check, one test per edge case, so a failure names the case that broke     |
-
+[jinja]: https://jinja.palletsprojects.com/en/stable/templates/
 [docxtpl]: https://docxtpl.readthedocs.io
 [jinjaninja]: https://github.com/ramonsaraiva/jinjaninja
