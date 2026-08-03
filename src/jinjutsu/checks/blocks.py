@@ -18,7 +18,7 @@ def check_mismatched_tags(source: str) -> list[str]:
     endfor_count = len(re.findall(statement_closing("endfor"), source))
     if for_count != endfor_count:
         warnings.append(
-            _tag_count(
+            warning_to_string(
                 title="Mismatched loop tags",
                 found=f"{for_count} {{% for %}} tag(s) but {endfor_count} {{% endfor %}} tag(s)",
                 fix="Each {% for %} must have a corresponding {% endfor %}",
@@ -29,7 +29,7 @@ def check_mismatched_tags(source: str) -> list[str]:
     endif_count = len(re.findall(statement_closing("endif"), source))
     if if_count != endif_count:
         warnings.append(
-            _tag_count(
+            warning_to_string(
                 title="Mismatched conditional tags",
                 found=f"{if_count} {{% if %}} tag(s) but {endif_count} {{% endif %}} tag(s)",
                 fix="Each {% if %} must have a corresponding {% endif %}",
@@ -61,7 +61,7 @@ def check_merge_tags_outside_loops(tags: list[Tag]) -> list[str]:
                         line_no=line_num,
                         title="Cell merge is not inside a loop",
                         found="{% " + keyword + " %}",
-                        fix="move it into the {% for %} whose rows it should merge across, or delete it",
+                        fix="Move it into the {% for %} whose rows it should merge across, or delete it",
                         reason=(
                             f"'{keyword}' merges a cell with the copies a loop makes of it, so docxtpl "
                             f"renders it as a check on the first iteration. With no loop to belong to, "
@@ -71,7 +71,3 @@ def check_merge_tags_outside_loops(tags: list[Tag]) -> list[str]:
                     )
                 )
     return warnings
-
-
-def _tag_count(*, title: str, found: str, fix: str) -> str:
-    return f"{title}\n  Found: {found}\n  Fix: {fix}"

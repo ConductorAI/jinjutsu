@@ -2,8 +2,8 @@
 We typically don't want to print object directly, since they render as {'header': {'title': 'X'}}
 
 Warnings:
-- '...' is an object and cannot be printed directly   {{ case }} where the template also reads case.title
-- '...' is a list and cannot be printed directly      {{ rows }} where the template also reads row.name
+- '...' is an object and can't be printed directly   {{ case }} where the template also reads case.title
+- '...' is a list and can't be printed directly      {{ rows }} where the template also reads row.name
 """
 
 from ..types import ListNode, ObjectNode, VariableNode, WalkResult, child_properties
@@ -20,20 +20,20 @@ def check_no_objects_printed_directly(walked: WalkResult) -> list[str]:
             continue
         if isinstance(node, ObjectNode):
             article, rendered = "an object", "{'field': ...}"
-            fix = "print a single field, e.g. {{ " + path + ".field }}"
+            fix = "Print a single field, e.g. {{ " + path + ".field }}"
         elif isinstance(node, ListNode):
             article, rendered = "a list", "['item', ...]"
-            fix = "loop over it with {% for item in " + path + " %}"
+            fix = "Loop over it with {% for item in " + path + " %}"
         else:
             continue
         warnings.append(
             warning_to_string(
                 line_no=lineno,
-                title=f"'{path}' is {article} and cannot be printed directly",
+                title=f"'{path}' is {article} and can't be printed directly",
                 found="{{ " + path + " }}",
                 fix=fix,
                 reason=(
-                    f"the template also reads fields from '{path}', so it receives {article}. "
+                    f"The template also reads fields from '{path}', so it receives {article}. "
                     f"Printing it renders {rendered} into the document."
                 ),
             )

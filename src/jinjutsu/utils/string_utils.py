@@ -13,14 +13,15 @@ def replace_comments_with_spaces(full_text: str) -> str:
 
 def warning_to_string(
     *,
-    line_no: int,
     title: str,
     found: str,
     fix: str,
+    line_no: int | None = None,
     reason: str | None = None,
     source_line: str | None = None,
 ) -> str:
-    parts = [f"Line {line_no}: {title}", f"  Found: {found}", f"  Fix:   {fix}"]
+    """`line_no` is None for a count that is wrong across the whole template, with no one line to blame"""
+    parts = [title if line_no is None else f"Line {line_no}: {title}", f"  Found: {found}", f"  Fix:   {fix}"]
     if reason:
         parts.append(f"  Reason: {reason}")
     if source_line:

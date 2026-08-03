@@ -207,33 +207,34 @@ Names the template invents are never reported, since nobody supplies them: loop 
 
 ## Diagnostics
 
-`report.diagnostics` is a list of formatted strings you can show the user directly. There are three
+`report.diagnostics` is a list of formatted strings you can show the user directly. There are two
 layouts, each built by one helper.
 
-`warning_to_string` in `utils/string_utils.py` — most warnings, wherever there is a line to point at:
+`warning_to_string` in `utils/string_utils.py` — every warning. Labels align at one column, and
+`title`, `fix` and `reason` all read as sentences, so a list of them looks like one voice:
 
 ```
 Line 4: 'a' is used as both a value and an object
   Found: a.b
-  Fix:   give the two uses different names        <- three spaces, aligned
+  Fix:   Give the two uses different names        <- three spaces, aligned
   Reason: ...                                    <- optional
   {{ a.b }}                                      <- optional source line
 ```
 
-`_tag_count` in `checks/blocks.py` — a count that is wrong across the whole template, so there is no
-one line to blame:
+Passing no `line_no` drops the prefix, for a count that is wrong across the whole template with no one
+line to blame. The rest of the layout is unchanged, so the two sit together in the same output:
 
 ```
 Mismatched loop tags
   Found: 1 {% for %} tag(s) but 0 {% endfor %} tag(s)
-  Fix: Each {% for %} must have a corresponding {% endfor %}   <- one space
+  Fix:   Each {% for %} must have a corresponding {% endfor %}
 ```
 
 `_syntax_error` in `checks/parser.py` — Jinja's own message, wrapped in friendlier guidance and kept
 underneath:
 
 ```
-Line 2: Unexpected 'b' after the expression
+Line 2: Unexpected 'b' after the expression. The tag holds one expression, nothing more
   {% if a b c %}
   Error: expected token 'end of statement block', got 'b'
 ```
@@ -258,14 +259,97 @@ one problem and only then discovered the next.
 
 ## docxtpl support
 
-docxtpl tags are rewritten to vanilla Jinja before parsing: the `tr`/`tc`/`p`/`r` row, cell,
-paragraph and run prefixes are blanked, `{% vm %}` and `{% hm %}` cell merges are blanked, and
-`{% colspan n %}` / `{% cellbg c %}` become `{{ n }}` / `{{ c }}`, which is what docxtpl substitutes.
+If you aren't working with docx files then this section is irrelevant, and you don't need to know what docxtpl is. If you are and would like to render custom Word elements such as a tables based on template values, read more about how to do this with docxtpl here: https://docxtpl.readthedocs.io/en/latest/
 
-**Every rewrite preserves character count and newline positions.** Whitespace inside a tag is
-insignificant to Jinja, which is what leaves room to pad. Widening or narrowing the text would
-silently shift every diagnostic after a docxtpl tag, and dropping a newline would shift every
-diagnostic in the rest of the template.
+As a quick primer, docxtpl is effectively a layer built on top of jinja — jinja does all the
+rendering, docxtpl gets the text into and out of the `.docx`. In addition to your own jinja tags you
+get a handful of built-in **tag prefixes** such as `tr` and `tc`, which tell docxtpl that a tag
+governs the table row or cell around it rather than just the text between the braces.
+
+**A `.docx` is not an input.** This package takes template *text*, so you will need extract the docx file's text and pass that into our validator.
+
+### What that buys, end to end
+
+A human author writes `invoice.docx` in Word. Here `{%tr %}` is the docxtpl prefix that makes the loop
+repeat the whole table row, and `{%p %}` makes the condition govern whole paragraphs:
+
+```
+Invoice {{ invoice.number }}
+{%tr for line in invoice.lines %}
+{{r line.desc }} {{ line.amount }}
+{%tr endfor %}
+{%p if invoice.paid %}
+PAID
+{%p endif %}
+```
+
+A prefixed statement tag has to sit **alone** in the element it names, because docxtpl replaces that
+whole element with the bare tag. Writing the condition on one line as
+`{%p if invoice.paid %}PAID{%p endif %}` analyses fine here but dies at render time with Jinja's
+`Encountered unknown tag 'endif'` — the paragraph the first tag consumed took the `if` with it.
+
+**Without docxtpl support**, Jinja rejects `{%tr %}` as an unknown tag, and a parse failure means no
+shapes at all. The author is told their correctly written template is broken:
+
+```
+Line 2: Check for typos or formatting issues
+  {%tr for line in invoice.lines %}
+  Error: Encountered unknown tag 'tr'.
+```
+
+**With it**, the prefixes are blanked before parsing and the real answer comes back:
+
+```
+invoice         object
+|-- number      string
+|-- lines       list of objects
+|   |-- desc    string
+|   `-- amount  string
+`-- paid        boolean
+```
+
+No warnings, because there is nothing wrong with the template. `lines` is a list of objects because
+`{%tr for %}` is a loop once the prefix is gone, and `paid` is a boolean because `{%p if %}` is a
+truthiness test. Both facts are unreachable if the parse fails.
+
+Then to render the template, hand docxtpl a context of exactly that shape. `desc` is a `RichText`
+because the template reads it with `{{r }}`, which replaces the run's XML — a plain string there
+vanishes from the document silently:
+
+```python
+from docxtpl import DocxTemplate, RichText
+
+context = {
+    "invoice": {
+        "number": "INV-0042",
+        "lines": [
+            {"desc": RichText("Design", bold=True), "amount": "$1,200.00"},
+            {"desc": RichText("Development"), "amount": "$3,400.00"},
+        ],
+        "paid": True,
+    }
+}
+
+template = DocxTemplate("invoice.docx")
+template.render(context)
+template.save("invoice_rendered.docx")
+```
+
+`invoice_rendered.docx` is a normal Word file — every style, font and header intact, only the tags
+replaced. Reading its text back:
+
+```
+Invoice INV-0042
+Design  $1,200.00
+Development  $3,400.00
+PAID
+```
+
+The two `{%tr %}` rows became one real table row per line item and the tag-only rows are gone, the
+first description is bold because the *data* said so, and `PAID` survived because `paid` was true —
+set it to `False` and that paragraph disappears entirely.
+
+[examples/docx](examples/docx) is this whole workflow as runnable scripts.
 
 ## Performance
 

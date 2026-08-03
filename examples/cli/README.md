@@ -84,7 +84,7 @@ Line 1: Field 'items' collides with a built-in method
   {{ client.items }}
 
 == examples/cli/invoice.jinja
-Nothing wrong
+Template parsed successfully with no warnings
 ```
 
 ## Template text instead of a file
@@ -99,3 +99,14 @@ Quote it — an unquoted `{{ ... }}` is brace expansion in bash and zsh.
 ## Exit codes
 
 `0` clean, `1` at least one diagnostic, `2` an argument that is neither a readable file nor a template.
+
+A `.docx` counts as unreadable — extract its text first and pass that, or pass the text inline.
+[examples/docx](../docx) shows the extraction step:
+
+```sh
+$ jinjutsu examples/docx/invoice.docx
+Error: examples/docx/invoice.docx
+  Problem: Not a text file
+  Fix:     Extract the document's text and pass that
+  Reason:  A .docx is a zip archive, so there is no text to read here.
+```

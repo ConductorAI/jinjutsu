@@ -309,10 +309,11 @@ class VariableTreeVisitor(NodeVisitor):
                 line_no=self._lineno,
                 title=f"'{path}' is used as both a value and an object",
                 found=f"{path}.{segment}",
-                fix="give the two uses different names",
+                fix="Give the two uses different names",
                 reason=(
-                    f"the template also uses '{path}' as a single value, so it cannot also "
-                    f"carry a '{segment}' field. One of the two renders empty."
+                    f"The template also uses '{path}' as a single value, so it can't also "
+                    f"carry {'an' if segment[:1].lower() in 'aeiou' else 'a'} '{segment}' field. "
+                    f"One of the two renders empty."
                 ),
             )
         )

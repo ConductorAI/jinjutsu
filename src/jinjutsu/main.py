@@ -25,9 +25,9 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     sources = [_read(template) for template in args.templates]
 
-    if missing := [t for t, source in zip(args.templates, sources, strict=True) if source is None]:
-        for template in missing:
-            print(f"jinjutsu: cannot read {template}", file=sys.stderr)
+    if unreadable := [source for source in sources if isinstance(source, str)]:
+        for error in unreadable:
+            print(error, file=sys.stderr)
         return 2
 
     reports = [(label, analyze_jinja_template(text)) for label, text in sources]
@@ -53,15 +53,35 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _read(template: str) -> tuple[str, str] | None:
-    """Label and text for one argument, or None when it names neither a file nor anything template shaped"""
+def _read(template: str) -> tuple[str, str] | str:
+    """Label and text for one argument, or a formatted error when it yields neither"""
     path = Path(template)
     if path.is_file():  # Swallows the OSError a whole template passed as a path would otherwise raise
-        # Word writes a BOM often enough that utf-8-sig is the safer read for the templates this targets
-        return str(path), path.read_text(encoding="utf-8-sig")
+        try:
+            # Word writes a BOM often enough that utf-8-sig is the safer read for the templates this targets
+            return str(path), path.read_text(encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            return _error_to_string(
+                template,
+                problem="Not a text file",
+                fix="Extract the document's text and pass that",
+                reason="A .docx is a zip archive, so there is no text to read here.",
+            )
+        except OSError as error:
+            return _error_to_string(template, problem=error.strerror or "Not readable", fix="Check its permissions")
     if any(marker in template for marker in TEMPLATE_MARKERS):
         return INLINE_LABEL, template
-    return None
+    if path.is_dir():
+        return _error_to_string(template, problem="Is a directory", fix="Pass the template files inside it")
+    return _error_to_string(template, problem="No such file", fix="Check the path, or quote the template text itself")
+
+
+def _error_to_string(template: str, *, problem: str, fix: str, reason: str | None = None) -> str:
+    """An unreadable argument, laid out the way warning_to_string lays out a warning"""
+    parts = [f"Error: {template}", f"  Problem: {problem}", f"  Fix:     {fix}"]
+    if reason:
+        parts.append(f"  Reason:  {reason}")
+    return "\n".join(parts)
 
 
 def _print_text(label: str, report: TemplateReport, sections: tuple[str, ...], *, show_filename: bool) -> None:

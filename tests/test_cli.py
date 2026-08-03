@@ -1,4 +1,7 @@
 import json
+import os
+
+import pytest
 
 from jinjutsu.main import main
 
@@ -76,7 +79,7 @@ def test_a_file_wins_over_template_text_when_both_could_match(tmp_path, capsys):
 def test_an_argument_that_is_neither_a_file_nor_a_template_still_exits_two(capsys):
     assert main(["not-a-template.jinja"]) == 2
 
-    assert "cannot read" in capsys.readouterr().err
+    assert "Error: not-a-template.jinja\n  Problem: No such file" in capsys.readouterr().err
 
 
 def test_warnings_only_omits_the_tree(tmp_path, capsys):
@@ -206,8 +209,30 @@ def test_a_missing_file_exits_two_without_analyzing(tmp_path, capsys):
     assert main([str(tmp_path / "nope.jinja")]) == 2
 
     captured = capsys.readouterr()
-    assert "cannot read" in captured.err
+    assert "No such file" in captured.err
     assert captured.out == ""
+
+
+def test_a_docx_is_reported_as_unreadable_rather_than_raising(tmp_path, capsys):
+    path = tmp_path / "report.docx"
+    path.write_bytes(b"PK\x03\x04\x80\x81\x82")  # A .docx is a zip, so it never decodes as text
+
+    assert main([str(path)]) == 2
+
+    captured = capsys.readouterr()
+    assert f"Error: {path}\n  Problem: Not a text file" in captured.err
+    assert captured.out == ""
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads a file whatever its mode says")
+def test_a_file_that_will_not_open_is_reported_rather_than_raising(tmp_path, capsys):
+    path = tmp_path / "locked.jinja"
+    path.write_text("{{ title }}")
+    path.chmod(0o000)
+
+    assert main([str(path)]) == 2
+
+    assert f"Error: {path}\n  Problem: Permission denied" in capsys.readouterr().err
 
 
 def test_a_byte_order_mark_from_word_does_not_become_part_of_a_name(tmp_path, capsys):

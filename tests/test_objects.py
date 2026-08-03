@@ -16,7 +16,7 @@ def test_whole_object_printed_is_reported():
     conflicts = conflicts_for(text)
 
     assert len(conflicts) == 1
-    assert "'a' is an object and cannot be printed directly" in conflicts[0]
+    assert "'a' is an object and can't be printed directly" in conflicts[0]
 
 
 def test_whole_list_printed_is_reported():
@@ -25,7 +25,7 @@ def test_whole_list_printed_is_reported():
     conflicts = conflicts_for(text)
 
     assert len(conflicts) == 1
-    assert "'items' is a list and cannot be printed directly" in conflicts[0]
+    assert "'items' is a list and can't be printed directly" in conflicts[0]
 
 
 def test_truthiness_guard_before_field_access_is_not_a_conflict():
