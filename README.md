@@ -180,7 +180,8 @@ Internally the walk builds a tagged union of node dataclasses — `ObjectNode`, 
 `StringNode`, `BooleanNode`, `NumberNode`, `UnknownNode`, discriminated on `kind`. That model is an
 implementation detail of `types.py` and is not exported; `schema.py` is the only thing that reads it.
 
-### How types are decided
+<details>
+<summary><h3>How types are decided</h3></summary>
 
 | template                                    | inferred                                        |
 | ------------------------------------------- | ----------------------------------------------- |
@@ -206,6 +207,8 @@ implementation detail of `types.py` and is not exported; `schema.py` is the only
 
 Names the template invents are never reported, since nobody supplies them: loop targets,
 `{% set %}` targets, and macro, call and with block parameters.
+
+</details>
 
 ## Diagnostics
 
@@ -445,3 +448,7 @@ what decides which names a template actually requires.
 - [jinja][jinja]
 - [docxtpl documentation][docxtpl]
 - [jinjaninja][jinjaninja]
+
+[jinja]: https://jinja.palletsprojects.com/en/stable/templates/
+[docxtpl]: https://docxtpl.readthedocs.io
+[jinjaninja]: https://github.com/ramonsaraiva/jinjaninja
