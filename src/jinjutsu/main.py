@@ -61,11 +61,18 @@ def _read(template: str) -> tuple[str, str] | str:
             # Word writes a BOM often enough that utf-8-sig is the safer read for the templates this targets
             return str(path), path.read_text(encoding="utf-8-sig")
         except UnicodeDecodeError:
+            if path.suffix.lower() == ".docx":
+                return _error_to_string(
+                    template,
+                    problem="Document is a .docx file, not a text file",
+                    fix="Extract text into a .txt file and try again",
+                    reason="We can't directly read docx files",
+                )
             return _error_to_string(
                 template,
-                problem="Not a text file",
-                fix="Extract the document's text and pass that",
-                reason="A .docx is a zip archive, so there is no text to read here.",
+                problem="Not UTF-8 text",
+                fix="Re-save the file as UTF-8, or pass the template text itself",
+                reason="A byte in it does not decode, so it is either binary or a legacy encoding",
             )
         except OSError as error:
             return _error_to_string(template, problem=error.strerror or "Not readable", fix="Check its permissions")

@@ -6,7 +6,7 @@ Jinja template. You author a `.docx` in Word with Jinja tags typed into the text
 header intact — only the tags are replaced.
 
 This directory is the whole workflow, runnable: check a template with jinjutsu, then render it with
-docxtpl. All commands run from the repo root, and `uv sync` installs what they need.
+docxtpl. 
 
 `samples/` holds two Word templates to run against. `invoice.docx` is correct — a `{%tr %}` loop in a
 table and a `{%p if %}` block. `client.docx` has a real mistake, `{{ client.items }}` colliding with a
@@ -172,15 +172,15 @@ So the steps below feed jinjutsu *text*, while [step 3](#2-render-it) hands docx
 ```sh
 $ jinjutsu examples/docx/samples/invoice.docx
 Error: examples/docx/samples/invoice.docx
-  Problem: Not a text file
-  Fix:     Extract the document's text and pass that
-  Reason:  A .docx is a zip archive, so there is no text to read here.
+  Problem: Document is a .docx file, not a text file
+  Fix:     Extract text into a .txt file and try again
+  Reason:  We can't directly read docx files
 ```
 
 So extract the text first:
 
 ```sh
-$ uv run --with python-docx python examples/docx/step1_extract_text.py examples/docx/samples/invoice.docx
+$ uv run python examples/docx/step1_extract_text.py examples/docx/samples/invoice.docx
 Invoice {{ invoice.number }}
 {%tr for line in invoice.lines %}
 {{r line.desc }}	{{ line.amount }}
@@ -205,14 +205,26 @@ PAID
 {%p endif %}
 ```
 
-`step1_extract_text.py` uses `Document.iter_inner_content()` instead, which yields paragraphs and tables
-in document order, and joins each table row's cells with a tab — whitespace is insignificant inside
-a Jinja tag, and one row per line keeps the reported line numbers pointing at the right row.
+`step1_extract_text.py` walks `word/document.xml` itself, emitting a line per paragraph and per table
+row with the cells tab-separated — whitespace is insignificant inside a Jinja tag, and one row per line
+keeps a reported line number pointing at the right row. It needs no python-docx: a `.docx` is a zip of
+XML, so `zipfile` and `ElementTree` are enough.
+
+**Textboxes, headers and footers count too**, and python-docx's object model cannot see the first of
+those at all. docxtpl renders tags in all three, so anything skipped here is a name the template needs
+that you were never told about — it renders blank, with no error. The check is parity with docxtpl's own
+`get_undeclared_template_variables()`:
+
+```
+                                extracted here     docxtpl
+tag in a textbox                boxed              boxed
+tag in a header / footer        hdr, ftr           hdr, ftr
+```
 
 Now analyze — pass the text to the CLI, or redirect to a file for CI:
 
 ```sh
-$ text="$(uv run --with python-docx python examples/docx/step1_extract_text.py examples/docx/samples/invoice.docx)"
+$ text="$(uv run python examples/docx/step1_extract_text.py examples/docx/samples/invoice.docx)"
 $ jinjutsu "$text"
 invoice         object
 |-- number      string
@@ -227,7 +239,7 @@ is a loop once the prefix is blanked, `paid` is a boolean because `{%p if %}` is
 The same pipeline on `client.docx` exits 1 and names its mistake:
 
 ```sh
-$ text="$(uv run --with python-docx python examples/docx/step1_extract_text.py examples/docx/samples/client.docx)"
+$ text="$(uv run python examples/docx/step1_extract_text.py examples/docx/samples/client.docx)"
 $ jinjutsu "$text"
 ===== warnings =================================================
 Line 2: Field 'items' collides with a built-in method
@@ -262,9 +274,12 @@ context = {
     }
 }
 
-template = DocxTemplate(CURRENT_DIR / "invoice.docx")
+template_path = Path(sys.argv[1])
+rendered_path = template_path.with_name(f"{template_path.stem}_rendered.docx")
+
+template = DocxTemplate(template_path)
 template.render(context)
-template.save(CURRENT_DIR / "invoice_rendered.docx")
+template.save(str(rendered_path))
 ```
 
 `desc` is a `RichText` because the template reads it with `{{r }}` — the first line renders bold
@@ -274,7 +289,7 @@ back with the same extractor:
 ```sh
 $ uv run --with docxtpl python examples/docx/step3_render.py examples/docx/samples/invoice.docx
 wrote examples/docx/samples/invoice_rendered.docx
-$ uv run --with python-docx python examples/docx/step1_extract_text.py examples/docx/samples/invoice_rendered.docx
+$ uv run python examples/docx/step1_extract_text.py examples/docx/samples/invoice_rendered.docx
 Invoice INV-0042
 Design	$1,200.00
 Development	$3,400.00
@@ -283,7 +298,7 @@ PAID
 
 The `{%tr %}` rows became one real table row per line item, the tag-only rows are gone, and the
 `PAID` paragraph survived because `paid` was true — set it to `False` and the paragraph disappears.
-`samples/` is generated output and is not committed.
+`invoice_rendered.docx` is generated output and is not committed.
 
 docxtpl goes further than this example — `InlineImage` drops a picture in from the context,
 `tpl.new_subdoc()` embeds a whole generated document, and `{{ var | safe }}` inserts raw XML. The

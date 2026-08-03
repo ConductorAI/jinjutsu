@@ -220,8 +220,19 @@ def test_a_docx_is_reported_as_unreadable_rather_than_raising(tmp_path, capsys):
     assert main([str(path)]) == 2
 
     captured = capsys.readouterr()
-    assert f"Error: {path}\n  Problem: Not a text file" in captured.err
+    assert f"Error: {path}\n  Problem: Document is a .docx file, not a text file" in captured.err
     assert captured.out == ""
+
+
+def test_an_undecodable_file_that_is_not_a_docx_is_not_called_one(tmp_path, capsys):
+    path = tmp_path / "smart_quotes.jinja"
+    path.write_bytes(b"{{ client\x92s_total }}")  # cp1252, the apostrophe Word types
+
+    assert main([str(path)]) == 2
+
+    captured = capsys.readouterr()
+    assert f"Error: {path}\n  Problem: Not UTF-8 text" in captured.err
+    assert ".docx" not in captured.err
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads a file whatever its mode says")
