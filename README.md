@@ -180,8 +180,10 @@ Internally the walk builds a tagged union of node dataclasses — `ObjectNode`, 
 `StringNode`, `BooleanNode`, `NumberNode`, `UnknownNode`, discriminated on `kind`. That model is an
 implementation detail of `types.py` and is not exported; `schema.py` is the only thing that reads it.
 
+### How types are decided
+
 <details>
-<summary><h3>How types are decided</h3></summary>
+<summary><b>The full inference table</b> (one row per pattern)</summary>
 
 | template                                    | inferred                                        |
 | ------------------------------------------- | ----------------------------------------------- |
@@ -316,8 +318,10 @@ One real table row per line item, the tag-only rows gone, and `PAID` there becau
 [examples/docx](examples/docx) is the whole workflow as runnable scripts — checking a document, then
 rendering it with docxtpl — plus the prefixes in more detail.
 
+## Performance
+
 <details>
-<summary><h2>Performance</h2></summary>
+<summary><b>TLDR: don't worry about it</b></summary>
 
 Wall-clock for one full `analyze_jinja_template` call against synthetic documents of the shape given,
 best of 3 runs. Both columns were measured in the same process on the same machine, so the ratios are
@@ -343,6 +347,8 @@ matters. Two rows are worth reading closely:
   sit* in that line, because its style regexes use a greedy `(.+\w+)?` that backtracks across
   everything following a tag. This package matches tags across newlines instead of per line, so all
   three one-long-line variants land within 20 ms of each other.
+
+</details>
 
 <details>
 <summary><b>Where the superlinear costs are</b></summary>
@@ -391,57 +397,29 @@ what decides which names a template actually requires.
 
 </details>
 
-</details>
+## Debugging
 
-<details>
-<summary><h2>Known limitations</h2></summary>
+Known limitations
 
+- **A template that will not parse reports no variables.** Diagnostics explain why, but the author has to fix them before seeing any shape information.
+- **Line numbers are lines of the extracted text**, not of the Word document, since the conversion to plain text loses formatting.
+- **An unevidenced shape is reported as `string`.** A name jinja requires that the walk never shaped serializes as `{"type": "string"}`, which is a default rather than a finding. Validating a context that supplies a number might fail.
 - **Nothing is marked required, on purpose.** Whether a name may be absent is a property of each
-  *place* it is used, not of the name: `{{ name | default("x") }}{{ name }}` is optional at one site
-  and mandatory at the other, and a single flag per name cannot say both. It also depends on the
-  renderer — under `StrictUndefined` even `{% if v %}` raises, so nothing is ever safely absent.
+  *place* it is used, not of the name: `{{ name | default("x") }}{{ name }}` is optional at one site and mandatory at the other, and a single flag per name cannot say both. It also depends on the renderer — under `StrictUndefined` even `{% if v %}` raises, so nothing is ever safely absent.
   Until usage sites are modelled the schema omits `required`, which in JSON Schema means no
-  obligations rather than an empty set of them. The walk does track which leaves were only ever
-  guarded; it feeds conflict suppression, not the schema.
-- **Optionality idioms are not read.** `{{ name | default("friend") }}`, `{% if name is defined %}`
-  and `{{ name or "friend" }}` all parse and yield the right *shape*, but the filter or test wrapper
-  is traversed through to reach the name beneath it, so the intent behind it is lost — the same
-  mechanism as the arithmetic gap below.
-- **An unevidenced shape is reported as `string`.** A name jinja requires that the walk never shaped
-  serializes as `{"type": "string"}`, which is a default rather than a finding. Validating a context
-  that supplies a number there fails against a claim the template never made.
-- **Filters do not inform the type.** `{{ v | int }}` reports `v` as a string, because the filter
-  wrapper is traversed through to reach the name beneath it and nothing carries down what it was
-  reached through. Arithmetic *is* read this way; filters are the remaining case, and they need a
-  decision first — `| int` suggests the value arrives as a string needing coercion, and `| length`
-  makes the *expression* a number while the name stays a list.
-- **`{% if x == 1 %}` reports `string`, but `{% if x > 1 %}` reports `number`.** Equality is left
-  alone deliberately: a value compared against `1` often arrives as `"1"` from a spreadsheet, whereas
-  nothing orders a value against a number unless it is one. The inconsistency is real.
-- **`{{ total-discount }}` warns even though it is valid subtraction**, because it is far more often
-  a name someone meant to write with an underscore. Writing `{{ total - discount }}` clears it.
+  obligations rather than an empty set of them.
+- **Default values aren't read.** `{{ name | default("friend") }}`, `{% if name is defined %}`
+  and `{{ name or "friend" }}` all parse and yield the right *shape*, but there can be conflicting filters throughout the document, as well as custom user defined filters in the jinja env that we don't parse.
+- **Filters don't inform the type.** `{{ v | int }}` reports `v` as a string, because the filter wrapper is traversed through to reach the name beneath it and nothing carries down what it was reached through. Arithmetic *is* read this way; filters are the remaining case, and they need a decision first — `| int` suggests the value arrives as a string needing coercion, and `| length` makes the *expression* a number while the name stays a list.
 - **An unknown filter reports no variables.** Asking Jinja for the names compiles the template, so
   `{{ x | to_json }}` fails there rather than at parse time, and a caller may well register that
   filter later. The template comes back with zero variables, though the warnings that do not depend
   on those names — a printed object, a name used as both a value and an object — are still reported.
-- **A template that will not parse reports no variables.** Diagnostics explain why, but the author
-  has to fix them before seeing any shape information.
-- **Line numbers are lines of the extracted text**, not of the Word document, since the conversion to
-  plain text loses formatting.
-- **Two checks are line-scoped**, so a broken delimiter split across a newline is not reported.
-  Well-formed tags are matched across lines; only the checks hunting *missing* delimiters work a line
-  at a time, because a tag with no delimiters cannot be found as a tag.
-- **A paragraph break inside a name hides the text checks.** `find_tags` folds the newline to a single
-  space so the tag reads as one line, which rejoins a break at a token boundary
-  (`{{ store⏎.items }}`) but not one inside a name (`{{ store.⏎items }}` folds to `store. items`, and
-  the collision check no longer matches). Variable extraction is unaffected either way, since Jinja
-  ignores whitespace inside a tag. Folding to nothing instead would fix this case and break
-  `{% for r⏎in rows %}`, so the space is deliberate.
-- **Tag style is not linted.** Spacing, casing and indentation inside tags are left alone on purpose:
-  docx extraction produces enough incidental whitespace that style rules fire constantly on valid
-  templates.
+- **`{% if x == 1 %}` reports `string`, but `{% if x > 1 %}` reports `number`.** Equality is ignored since it is less of a signal than the > comparision, so we go with number as the final type.
+- **`{{ total-discount }}` warns even though it is valid subtraction**, because it is far more often a name someone meant to write with an underscore. Writing `{{ total - discount }}` clears it.
+- **Some checks are line-scoped**, so a broken delimiter split across a newline might not be reported.
+- **No lint checks on spacing.** Spacing, casing and indentation inside tags are left alone on purpose since docx extraction will produce enough random whitespace that style rules would fire constantly on valid templates.
 
-</details>
 
 ## Resources
 
