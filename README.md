@@ -399,7 +399,7 @@ what decides which names a template actually requires.
 
 ## Debugging
 
-Known limitations
+Known limitations, ordered by most to least likely to be encountered:
 
 - **A template that will not parse reports no variables.** Diagnostics explain why, but the author has to fix them before seeing any shape information.
 - **Line numbers are lines of the extracted text**, not of the Word document, since the conversion to plain text loses formatting.
@@ -423,9 +423,11 @@ Known limitations
 
 ## Resources
 
-- [jinja][jinja]
-- [docxtpl documentation][docxtpl]
-- [jinjaninja][jinjaninja]
+- [jinja][jinja] — The syntax template authors write: tags, filters, tests and expressions. What this package parses, and what its diagnostics teach.
+- [docxtpl][docxtpl] — Syntax for rendering a Word document as a Jinja template. Covers the prefixed tags (`{%p %}`, `{%tr %}`), `RichText`, and everything else the
+  [docxtpl support](#support-for-docxtpl) section summarizes.
+- [jinjaninja][jinjaninja] — The Jinja style linter benchmarked in the
+  [comparison above](#why-not-just-use-jinjas-parser).
 
 [jinja]: https://jinja.palletsprojects.com/en/stable/templates/
 [docxtpl]: https://docxtpl.readthedocs.io
