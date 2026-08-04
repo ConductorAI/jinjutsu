@@ -63,7 +63,7 @@ message · ❌ no finding, template reported clean
 | Whole object printed with `{{ }}`                                  | ✅                                          | ❌                                      | ❌                   |
 | Whole list printed with `{{ }}`                                    | ✅                                          | ❌                                      | ❌                   |
 | Same name used as both scalar and object                           | ✅                                          | ❌                                      | ❌                   |
-| Unknown filter (`{{ x \| to_json }}`)                              | ❌ zero variables, other warnings still made | ❌                                      | ❌                   |
+| Unknown filter (`{{ x \| to_json }}`)                              | ✅ names the filter, suggests `tojson`      | ❌                                      | ❌                   |
 | **docxtpl-specific**                                               |                                             |                                         |                      |
 | `{%tr %}` / `{%p %}` / `{{r }}` prefixed tags                      | ✅ correctly ignored                        | ❌ false positive — unknown tag `'tr'`  | ❌ false positive    |
 | `{% vm %}` `{% hm %}` `{% colspan n %}` `{% cellbg c %}`, used well | ✅ ignored, arguments extracted             | ❌ false positive — unknown tag `'tr'`  | ❌ false positive    |
@@ -101,7 +101,7 @@ jinjutsu NAME_OF_TEMPLATE_FILE.txt [--warnings] [--tree] [--schema] [--all]
 
 See [examples/cli](examples/cli) for what each flag prints.
 
-## Example Schemas
+## Examples
 
 `report.schema` is a JSON Schema for the context object the template expects. Given:
 
@@ -290,7 +290,7 @@ depending on whether we have line breaks because its regexes use a greedy `(.+\w
 </details>
 
 <details>
-<summary><b>Where the superlinear costs are</b></summary>
+<summary><b>Where the costs are</b></summary>
 
 **An axis is one thing you can make bigger about a template.** Every cost below is a product of two
 of them, so each row names its own pair. For example `find_tags` costs tags × bytes, and a template with many tags *and* many bytes is what makes it expensive.
@@ -332,8 +332,6 @@ Known limitations, ordered by most to least likely to be encountered:
 - **Nothing is marked required, on purpose.** This is hard to determine, also optional is debatably the best approach here philosophically since by default missing variables will not cause the template not to render.
 - **Default values aren't read.** `{{ name | default("friend") }}`, `{% if name is defined %}` and `{{ name or "friend" }}` parse and yield the right type, but there might be conflicting defaults for the same variable throughout the document.
 - **Filters aren't factored when deciding on the type.** This wouldn't be reliable for now since an object can have a lot of filters that imply different types, including custom filters defined in the user's Jinja environments
-- **An unknown filter reports no variables.** Asking Jinja for the names compiles the template, so `{{ x | to_json }}` fails there instead of at parse time, and a caller might register that
-  filter later. The template comes back with zero variables, though the warnings that don't depend on those names are still reported. We are working to support this.
 - **`{% if x == 1 %}` reports `string`, but `{% if x > 1 %}` reports `number`.** The equality check gets ignored since it isn't as strong of a signal as the > comparison, and we go with number as the final type.
 - **`{{ pending-edits }}` warns even though it is valid subtraction** Likely that someone meant to type a variable with an underscore. Changing the text to `{{ pendings - edits }}` with spacing clears it.
 - **Some checks are line-scoped**, A broken delimiter split across a newline might not be reported.

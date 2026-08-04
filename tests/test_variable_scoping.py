@@ -58,15 +58,41 @@ def test_commented_out_variables_are_ignored():
     assert set(variables) == {"real_var"}
 
 
-def test_unknown_filter_does_not_raise():
-    text = "{{ amount | to_json }}"
+def test_unknown_filter_keeps_the_variables_and_names_the_filter():
+    text = "{{ amount | to_json }}{{ client.name }}"
 
-    assert schema_for(text)["properties"] == {}
+    assert set(schema_for(text)["properties"]) == {"amount", "client"}
+    assert "Unknown filter 'to_json'" in warnings_for(text)[0]
+
+
+def test_unknown_filter_close_to_a_builtin_suggests_it():
+    warnings = warnings_for("{{ name | uppercase }}")
+
+    assert "Unknown filter 'uppercase'" in warnings[0]
+    assert "Did you mean 'upper'?" in warnings[0]
+
+
+def test_unknown_filter_with_no_lookalike_offers_registering_it():
+    warnings = warnings_for("{{ total | usd }}")
+
+    assert "Unknown filter 'usd'" in warnings[0]
+    assert "Register 'usd'" in warnings[0]
+
+
+def test_unknown_test_is_reported_and_keeps_the_variable():
+    text = "{% if x is weird %}hi{% endif %}"
+
+    assert "Unknown test 'weird'" in warnings_for(text)[0]
+    assert "x" in schema_for(text)["properties"]
+
+
+def test_builtin_filters_and_tests_are_not_flagged():
+    text = "{{ x | upper }}{{ y | default('z') }}{% if n is defined %}{% endif %}"
+
     assert warnings_for(text) == []
 
 
 def test_unknown_filter_still_reports_what_the_walk_found():
-    # The filter costs us the names, but it says nothing about the shapes the walk already saw
     printed = "{{ case.title }}{{ case }}{{ amount | to_json }}"
     clashed = "{{ total }}{{ total.amount }}{{ amount | to_json }}"
 

@@ -14,7 +14,7 @@ from .checks.blocks import (
     check_prefixed_tags_share_an_element,
 )
 from .checks.delimiters import check_malformed_tags, check_misplaced_statement_delimiters
-from .checks.names import check_builtin_method_attributes, check_hyphenated_variables
+from .checks.names import check_builtin_method_attributes, check_hyphenated_variables, check_unknown_filters
 from .checks.objects import check_no_objects_printed_directly
 from .checks.parser import check_jinja_syntax, should_defer_to_tag_counts
 from .schema import context_schema
@@ -23,7 +23,27 @@ from .utils.docxtpl_utils import normalize_docxtpl_prefixes
 from .utils.tag_utils import TemplateText, read_template
 from .variable_tree import VariableTreeVisitor
 
+
+class TolerantRegistry(dict):
+    """
+    Passthrough unknown variables names (aka behave as if they didn't exist)
+    This is to prevent custom user-defined filters or filter typos from messing up the entire parser and exiting early
+    """
+
+    @staticmethod
+    def _passthrough(value, *args, **kwargs):
+        return value
+
+    def get(self, key, default=None):
+        return super().get(key, self._passthrough)
+
+    def __missing__(self, key):
+        return self._passthrough
+
+
 JINJA_ENV = Environment()
+JINJA_ENV.filters = TolerantRegistry(JINJA_ENV.filters)
+JINJA_ENV.tests = TolerantRegistry(JINJA_ENV.tests)
 
 
 def analyze_jinja_template(template_text: str) -> TemplateReport:
@@ -66,7 +86,8 @@ def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, Variable
         return {}, []
 
     walked = VariableTreeVisitor().walk(ast)
-    warnings = list(dict.fromkeys(walked.warnings + check_no_objects_printed_directly(walked)))
+    found = walked.warnings + check_no_objects_printed_directly(walked) + check_unknown_filters(ast)
+    warnings = list(dict.fromkeys(found))
 
     # Jinja decides which names the template actually asks for
     # The walk only says what shape each one has

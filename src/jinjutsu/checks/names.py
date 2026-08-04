@@ -2,13 +2,23 @@
 Warnings:
 - Variable name contains hyphen(s)             {{ total-discount }}
 - Field '...' collides with a built-in method  {{ store.items }}
+- Unknown filter '...'                         {{ x | to_json }}
 """
 
 import re
 from collections.abc import Iterable
+from difflib import get_close_matches
+
+from jinja2 import Environment, nodes
 
 from ..utils.string_utils import warning_to_string
 from ..utils.tag_utils import Tag
+
+KNOWN_FILTERS = frozenset(Environment().filters)
+KNOWN_TESTS = frozenset(Environment().tests)
+
+# The filter 'uppercase' scores 0.714 against 'upper' which is an example of a typo this exists for
+SUGGESTION_CUTOFF = 0.7
 
 HYPHENATED_NAME = re.compile(r"(?<![\w.])[A-Za-z_]\w*(?:\.\w+)*(?:-[A-Za-z_]\w*)+")
 
@@ -44,6 +54,38 @@ def check_hyphenated_variables(tags: list[Tag]) -> list[str]:
                     source_line=line,
                 )
             )
+    return warnings
+
+
+def check_unknown_filters(ast: nodes.Template) -> list[str]:
+    """
+    Check for filter and test names jinja does not ship, which fail at render rather than at parse
+
+    A name the renderer's environment registers is valid there and unknowable here, so the fix
+    offers both readings: the typo of a built-in, and the custom filter this tool cannot see
+    """
+    warnings = []
+    for node in ast.find_all((nodes.Filter, nodes.Test)):
+        kind, known = ("filter", KNOWN_FILTERS) if isinstance(node, nodes.Filter) else ("test", KNOWN_TESTS)
+        if node.name in known:
+            continue
+        suggestion = get_close_matches(node.name, known, n=1, cutoff=SUGGESTION_CUTOFF)
+        warnings.append(
+            warning_to_string(
+                line_no=node.lineno,
+                title=f"Unknown {kind} '{node.name}'",
+                found=f"| {node.name}" if kind == "filter" else f"is {node.name}",
+                fix=(
+                    f"Did you mean '{suggestion[0]}'?"
+                    if suggestion
+                    else f"Register '{node.name}' in the environment that renders this template, or check the spelling"
+                ),
+                reason=(
+                    f"Jinja only knows its built-in {kind}s, so the document fails to render with "
+                    f"\"No {kind} named '{node.name}'\" unless the renderer registers it first."
+                ),
+            )
+        )
     return warnings
 
 
