@@ -18,8 +18,8 @@ breakage, and 10 that parse cleanly but render wrong.
 
 |                  | valid templates falsely flagged | real breakage caught | semantic gotchas caught |
 | ---------------- | ------------------------------: | -------------------: | ----------------------: |
-| **This package** |                        **0/21** |            **28/29** |                **8/10** |
-| Plain Jinja      |                            4/21 |                24/29 |                    0/10 |
+| **jinjutsu**     |                        **1/21** |            **28/29** |                **9/10** |
+| plain jinja      |                            4/21 |                24/29 |                    0/10 |
 | [jinjaninja]     |                            4/21 |                 4/29 |                    0/10 |
 
 
@@ -27,12 +27,12 @@ In fairness to [jinjaninja], it bills itself as a style enforcement tool, so cor
 not what it set out to catch but we're including it in the table because it is the closest package to a Jinja validator that exists today.
 
 <details>
-<summary><b>Full case-by-case comparison</b> (38 cases)</summary>
+<summary><b>Full case-by-case comparison</b> (39 cases)</summary>
 
 **Legend** — ✅ detected, with a message naming the mistake · ⚠️ detected, but only a raw parser
 message · ❌ no finding, template reported clean
 
-| Error                                                              | This package                                | Plain Jinja                             | jinjaninja           |
+| Error                                                              | jinjutsu                                    | plain jinja                             | jinjaninja           |
 | ------------------------------------------------------------------ | ------------------------------------------- | --------------------------------------- | -------------------- |
 | **Broken delimiters**                                              |                                             |                                         |                      |
 | `{{ x }` — missing brace                                           | ✅ named + fix                              | ⚠️ unexpected `'}'`                      | ❌                   |
@@ -57,6 +57,7 @@ message · ❌ no finding, template reported clean
 | `{{ fiscal-year }}`                                                | ✅ explains subtraction, offers spaced form | ❌                                      | ❌                   |
 | `{% if fiscal-year %}`                                             | ✅ same check                               | ❌                                      | ❌                   |
 | `{% for r in funding-rows %}`                                      | ✅ same check                               | ❌                                      | ❌                   |
+| `{{ total-pending }}` where subtraction was intended               | ❌ false positive — the spaced `total - pending` clears it | ✅ renders the subtraction | ✅ silent            |
 | **Semantic** — passes Jinja's parser, wrong at render              |                                             |                                         |                      |
 | `.items` / `.keys` / `.values` — dict methods                      | ✅ + bracket fix                            | ❌                                      | ❌                   |
 | `.count` / `.index` / `.sort` — list methods                       | ✅ + bracket fix, all 19 names              | ❌                                      | ❌                   |
@@ -269,7 +270,7 @@ See [examples/docx](examples/docx) for runnable scripts to test out this workflo
 One full `analyze_jinja_template` call against random test documents with the following attributes, recording the best of 3 runs.
 These ratios are meaningful even though the absolute numbers might vary in different environments:
 
-| shape (chars, lines)                                            | this package |  jinjaninja |
+| shape (chars, lines)                                            | jinjutsu     |  jinjaninja |
 | --------------------------------------------------------------- | -----------: | ----------: |
 | 100 pg prose, 6 tags (301 KB, 750 lines)                        |        23 ms |        5 ms |
 | 500 pg prose, 6 tags (1.5 MB, 3750 lines)                       |       111 ms |       26 ms |
