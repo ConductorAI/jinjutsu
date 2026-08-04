@@ -2,20 +2,16 @@
 
 Read a Jinja template and answer two questions:
 
-1. **What data does this template need?** Not just the variable names, but the the expected types for each variable. Jinja's own
-   `meta.find_undeclared_variables` gives you names only.
-2. **What is wrong with it?** In plain language a non-programmer can act on, with a line number, the
-   text that caused it, and a suggested fix.
+1. **What data does this template need?** Not just the variable names, but the the expected types for each variable. Jinja currently only returns a list of variable names.
+2. **What is wrong with it?** In plain language a non-programmer can act on, with a line number, the text that caused it, and a suggested fix.
 
-Includes extra support for parsing [docxtpl] tags, which represent formatting for tables or paragraphs for templates meant to be rendered in Word.
-
-
-## Why not just use Jinja's parser?
+## How does it compare with using Jinja directly?
 
 Jinja's messages make it difficult to tell what's wrong or how to fix it, and they often blame the wrong line or include false positives. `Encountered unknown tag
-'endif'` on line 40 is a useless thing to show someone whose real mistake was typing `{ % if x %}` on
-line 1. They also don't warn on errors that are technically valid jinja, but likely to be wrong, such as printing a built in function (which renders as <method 'index' of 'list' objects>)
-or having a variable name such as pending-edits (which renders as subtraction)
+'endif'` on line 40 is a useless thing to show someone whose real mistake was typing `{ % if x %}` on the first line. 
+
+Jinja also doesn't warn on errors that are technically valid jinja, but likely to be wrong, such as printing a built in function (which renders as `<method 'index' of 'list' objects>`)
+or having a variable name such as `pending-edits`, which renders as subtraction.
 
 Measured against three hand-built suites: 21 valid templates that must not be flagged, 29 with real
 breakage, and 10 that parse cleanly but render wrong.
@@ -28,7 +24,7 @@ breakage, and 10 that parse cleanly but render wrong.
 
 
 In fairness to [jinjaninja], it bills itself as a style enforcement tool, so correctness cases are
-not what it set out to catch but we're including it in the table because it is the closest package to a Jinja validator that exists today
+not what it set out to catch but we're including it in the table because it is the closest package to a Jinja validator that exists today.
 
 <details>
 <summary><b>Full case-by-case comparison</b> (38 cases)</summary>
@@ -193,23 +189,21 @@ Line 2: Unexpected 'b' after the expression. The tag holds one expression, nothi
   Error: expected token 'end of statement block', got 'b'
 ```
 
-### Which warnings survive
+### Which warnings survive?
 
 The custom checks run first, and Jinja's parser is the fallback for anything they miss. Warnings from our custom checker silences Jinja errors only when both are looking at the same mistake.
 
-- A **broken delimiter** silences Jinja errors entirely. Jinja reads the tag as plain text, so every error is based on an incorrect assumption
-- A **tag-count mismatch** silences Jinja's block-balance errors (`unexpected end of template`, unknown tag 'end…'`), which restate the same imbalance less clearly.
-- Everything else (hyphens, built-in method collisions, cell merges) don't silences anything, since these don't affectwhether the template parses.
+- A **broken delimiter** silences Jinja errors entirely. Jinja reads the tag as plain text, so every error is based on an incorrect assumption.
+- A **tag-count mismatch** silences Jinja's block-balance errors (`unexpected end of template`, `unknown tag 'end…'`) would just restate the same imbalance less clearly.
+- All other errors (hyphens, built-in method collisions, cell merges) don't silences anything, since these don't affect whether the template parses.
 
-This matters. A mismatched tag used to hide a genuine expression error further down, so authors fixed
-one problem and only then discovered the next.
+This is a big UX improvement from the Jinja-only workflow, since previously a mismatched tag would to hide a genuine expression error further down, so author would fixe one problem and only then discover the next.
 
 ## Support for `docxtpl`
 
 If you're not working with docx files then this section is irrelevant, and you don't need to know what docxtpl is. If you are and would like to render custom Word elements such as tables based on template values, read more about how to do this with docxtpl here: https://docxtpl.readthedocs.io/en/latest/
 
-As a quick primer, docxtpl is effectively a layer built on top of Jinja. Jinja does all the
-rendering while docxtpl gets the text into and out of the `.docx`. In addition to your own Jinja tags you
+As a quick primer, docxtpl is effectively a layer built on top of Jinja. Jinja does all the rendering while docxtpl gets the text into and out of the `.docx`. In addition to your own Jinja tags you
 get a handful of built-in **tag prefixes** such as `tr` and `tc`, which tell docxtpl when to render a new table row or cell
 
 **Word documents can be passed directly, but we only analyze the parsed text from that document** The CLI extracts the document's template text itself (including from paragraphs,
@@ -266,7 +260,7 @@ Development  $3,400.00
 PAID
 ```
 
-See [examples/docx](examples/docx) for runnable scripts to test out this workflow
+See [examples/docx](examples/docx) for runnable scripts to test out this workflow.
 
 ## Performance
 
@@ -339,7 +333,7 @@ Known limitations, ordered by most to least likely to be encountered:
 - **Default values aren't read.** `{{ name | default("friend") }}`, `{% if name is defined %}` and `{{ name or "friend" }}` parse and yield the right type, but there might be conflicting defaults for the same variable throughout the document.
 - **Filters aren't factored when deciding on the type.** This wouldn't be reliable for now since an object can have a lot of filters that imply different types, including custom filters defined in the user's Jinja environments
 - **An unknown filter reports no variables.** Asking Jinja for the names compiles the template, so `{{ x | to_json }}` fails there instead of at parse time, and a caller might register that
-  filter later. The template comes back with zero variables, though the warnings that don't depend on those names — a printed object, a name used as both a value and an object — are still reported.
+  filter later. The template comes back with zero variables, though the warnings that don't depend on those names are still reported. We are working to support this.
 - **`{% if x == 1 %}` reports `string`, but `{% if x > 1 %}` reports `number`.** The equality check gets ignored since it isn't as strong of a signal as the > comparison, and we go with number as the final type.
 - **`{{ pending-edits }}` warns even though it is valid subtraction** Likely that someone meant to type a variable with an underscore. Changing the text to `{{ pendings - edits }}` with spacing clears it.
 - **Some checks are line-scoped**, A broken delimiter split across a newline might not be reported.
