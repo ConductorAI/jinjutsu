@@ -18,10 +18,10 @@ invoice         object
 $ jinjutsu examples/cli/client.jinja
 ===== warnings =================================================
 Line 1: Field 'items' collides with a built-in method
-  Found: {{ client.items }}
-  Fix:   {{ client['items'] }}
+  Source: {{ client.items }}
+  Found:  {{ client.items }}
+  Fix:    {{ client['items'] }}
   Reason: Jinja reads '.items' as the value's own method, so the document renders the method instead of your value. Use bracket syntax.
-  {{ client.items }}
 
 ===== tree =====================================================
 client     object
@@ -33,10 +33,10 @@ client     object
 ```sh
 $ jinjutsu examples/cli/client.jinja --warnings
 Line 1: Field 'items' collides with a built-in method
-  Found: {{ client.items }}
-  Fix:   {{ client['items'] }}
+  Source: {{ client.items }}
+  Found:  {{ client.items }}
+  Fix:    {{ client['items'] }}
   Reason: Jinja reads '.items' as the value's own method, so the document renders the method instead of your value. Use bracket syntax.
-  {{ client.items }}
 ```
 
 ## `--tree`
@@ -78,10 +78,10 @@ All three sections in the order above, each behind its divider. The flags also c
 $ jinjutsu examples/cli/*.jinja --warnings
 == examples/cli/client.jinja
 Line 1: Field 'items' collides with a built-in method
-  Found: {{ client.items }}
-  Fix:   {{ client['items'] }}
+  Source: {{ client.items }}
+  Found:  {{ client.items }}
+  Fix:    {{ client['items'] }}
   Reason: Jinja reads '.items' as the value's own method, so the document renders the method instead of your value. Use bracket syntax.
-  {{ client.items }}
 
 == examples/cli/invoice.jinja
 Template parsed successfully with no warnings

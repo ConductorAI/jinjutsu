@@ -28,6 +28,10 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
                         title="Extra space after '{' in tag",
                         found=malformed_tag,
                         fix=malformed_tag.replace("{ ", "{").replace(" }", "}"),
+                        reason=(
+                            "Jinja only sees '{%' written without a space, so it reads this as plain text "
+                            "and then stops at the end tag that no longer has an opener."
+                        ),
                         source_line=line,
                     )
                 )
@@ -42,6 +46,10 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
                         title="Extra space before '}' in tag",
                         found=malformed_tag,
                         fix=malformed_tag.replace("{ ", "{").replace(" }", "}"),
+                        reason=(
+                            "Jinja only sees '%}' written without a space, so the tag never closes "
+                            "and the render stops with \"unexpected '}'\"."
+                        ),
                         source_line=line,
                     )
                 )
@@ -69,6 +77,10 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
                     title="Missing closing '}}' in variable tag",
                     found=incomplete_tag,
                     fix=incomplete_tag + "}",
+                    reason=(
+                        "One '}' does not close a '{{' tag, so the render stops with \"unexpected '}'\" "
+                        "and no document comes out."
+                    ),
                     source_line=line,
                 )
             )
@@ -86,6 +98,10 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
                     title="Missing closing '%}' in statement tag",
                     found=incomplete_tag,
                     fix=incomplete_tag[:-1] + "%}",
+                    reason=(
+                        "A '{%' tag has to close with '%}', so the render stops with \"unexpected '}'\" "
+                        "and no document comes out."
+                    ),
                     source_line=line,
                 )
             )

@@ -184,10 +184,10 @@ The same call on `client.docx` exits 1 and names its mistake:
 $ jinjutsu examples/docx/samples/client.docx
 ===== warnings =================================================
 Line 2: Field 'items' collides with a built-in method
-  Found: {{ client.items }}
-  Fix:   {{ client['items'] }}
+  Source: Your order: {{ client.items }}
+  Found:  {{ client.items }}
+  Fix:    {{ client['items'] }}
   Reason: Jinja reads '.items' as the value's own method, so the document renders the method instead of your value. Use bracket syntax.
-  Your order: {{ client.items }}
 
 ===== tree =====================================================
 client     object

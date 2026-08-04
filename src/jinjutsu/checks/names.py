@@ -11,7 +11,7 @@ from difflib import get_close_matches
 
 from jinja2 import Environment, nodes
 
-from ..utils.string_utils import warning_to_string
+from ..utils.string_utils import read_source_line, warning_to_string
 from ..utils.tag_utils import Tag, statement_keyword
 
 KNOWN_FILTERS = frozenset(Environment().filters)
@@ -60,7 +60,7 @@ def check_hyphenated_variables(tags: list[Tag]) -> list[str]:
     return warnings
 
 
-def check_unknown_filters(ast: nodes.Template) -> list[str]:
+def check_unknown_filters(ast: nodes.Template, lines: list[str]) -> list[str]:
     """
     Check for filter and test names jinja does not ship, which fail at render rather than at parse
 
@@ -87,6 +87,7 @@ def check_unknown_filters(ast: nodes.Template) -> list[str]:
                     f"Jinja only knows its built-in {kind}s, so the document fails to render with "
                     f"\"No {kind} named '{node.name}'\" unless the renderer registers it first."
                 ),
+                source_line=read_source_line(lines, node.lineno),
             )
         )
     return warnings

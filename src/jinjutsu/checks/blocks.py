@@ -7,36 +7,44 @@ Warnings:
 
 import re
 
-from ..utils.string_utils import warning_to_string
-from ..utils.tag_utils import STATEMENT_KEYWORD, Tag, statement_closing, statement_keyword, statement_opening
+from ..utils.string_utils import read_source_line, warning_to_string
+from ..utils.tag_utils import (
+    STATEMENT_KEYWORD,
+    Tag,
+    TemplateText,
+    statement_closing,
+    statement_keyword,
+    statement_opening,
+)
 
 # What each docxtpl prefix makes its tag consume. 'r' is a run, a span inside a paragraph, so two of
 # them can share a line without either being destroyed
 PREFIXED_ELEMENTS = {"tr": "table row", "tc": "table cell", "p": "paragraph"}
 
 
-def check_mismatched_tags(source: str) -> list[str]:
+def check_mismatched_tags(text: TemplateText) -> list[str]:
     warnings = []
 
-    for_count = len(re.findall(statement_opening("for"), source))
-    endfor_count = len(re.findall(statement_closing("endfor"), source))
-    if for_count != endfor_count:
+    for opener, closer, title in [("for", "endfor", "loop"), ("if", "endif", "conditional")]:
+        open_positions = [match.start() for match in re.finditer(statement_opening(opener), text.source)]
+        close_positions = [match.start() for match in re.finditer(statement_closing(closer), text.source)]
+        if len(open_positions) == len(close_positions):
+            continue
+        line_no = _line_no_for_unbalanced_tag_error(text.source, open_positions, close_positions)
         warnings.append(
             warning_to_string(
-                title="Mismatched loop tags",
-                found=f"{for_count} {{% for %}} tag(s) but {endfor_count} {{% endfor %}} tag(s)",
-                fix="Each {% for %} must have a corresponding {% endfor %}",
-            )
-        )
-
-    if_count = len(re.findall(statement_opening("if"), source))
-    endif_count = len(re.findall(statement_closing("endif"), source))
-    if if_count != endif_count:
-        warnings.append(
-            warning_to_string(
-                title="Mismatched conditional tags",
-                found=f"{if_count} {{% if %}} tag(s) but {endif_count} {{% endif %}} tag(s)",
-                fix="Each {% if %} must have a corresponding {% endif %}",
+                line_no=line_no,
+                title=f"Mismatched {title} tags",
+                found=(
+                    f"{len(open_positions)} {{% {opener} %}} tag(s) "
+                    f"but {len(close_positions)} {{% {closer} %}} tag(s)"
+                ),
+                fix=f"Each {{% {opener} %}} must have a corresponding {{% {closer} %}}",
+                reason=(
+                    f"Jinja pairs each {{% {opener} %}} with the next {{% {closer} %}}, so an unpaired one "
+                    f"swallows the rest of the template and nothing renders."
+                ),
+                source_line=read_source_line(text.lines, line_no),
             )
         )
 
@@ -126,3 +134,20 @@ def check_merge_tags_outside_loops(tags: list[Tag]) -> list[str]:
                     )
                 )
     return warnings
+
+
+def _line_no_for_unbalanced_tag_error(source: str, open_positions: list[int], close_positions: list[int]) -> int:
+    """Returns line number of the first tag that doesn't have a corresponding closing tag"""
+    depth = 0
+    unpaired = 0  # the counts differ, so a tag below always claims this, and line 1 is the fallback if none does
+    for position, is_opener in sorted([(p, True) for p in open_positions] + [(p, False) for p in close_positions]):
+        if is_opener:
+            if depth == 0:
+                unpaired = position
+            depth += 1
+        else:
+            depth -= 1
+            if depth < 0:  # a closer with nothing open before it
+                unpaired = position
+                break
+    return source.count("\n", 0, unpaired) + 1

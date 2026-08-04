@@ -23,7 +23,7 @@ from .shapes import (
     WalkResult,
 )
 from .utils.ast_utils import NamePathSegment, jinja_local_variables, split_ast_object_path, strip_list_operations
-from .utils.string_utils import warning_to_string
+from .utils.string_utils import read_source_line, warning_to_string
 
 # Where a node lives: a name in a dict, or the element of a list
 Slot = tuple[dict[str, VariableNode], str] | ListNode
@@ -69,7 +69,8 @@ class VariableTreeVisitor(NodeVisitor):
     each path is used. Every visit_* method sets `lineno`, otherwise a warning cites a stale line
     """
 
-    def __init__(self) -> None:
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
         self._root: dict[str, VariableNode] = {}
         self._scope: list[dict[str, Slot]] = [{}]
         self._warnings: list[str] = []
@@ -315,6 +316,7 @@ class VariableTreeVisitor(NodeVisitor):
                     f"carry {'an' if segment[:1].lower() in 'aeiou' else 'a'} '{segment}' field. "
                     f"One of the two renders empty."
                 ),
+                source_line=read_source_line(self._lines, self._lineno),
             )
         )
 

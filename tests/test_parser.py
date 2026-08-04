@@ -1,10 +1,11 @@
 from .helpers import warnings_for
 
 
-def test_single_equals_in_a_condition_suggests_the_comparison_operator():
+def test_single_equals_in_a_condition_offers_the_corrected_tag():
     warnings = warnings_for("{% if status = 'FINAL' %}y{% endif %}")
 
-    assert any("Use '==' to compare" in w for w in warnings)
+    assert any("Single '=' in a condition" in w for w in warnings)
+    assert any("Fix:    {% if status == 'FINAL' %}" in w for w in warnings)
 
 
 def test_comparison_operator_is_not_reported():
@@ -13,17 +14,20 @@ def test_comparison_operator_is_not_reported():
     assert not warnings
 
 
-def test_curly_double_quote_from_word_is_named():
+def test_curly_double_quote_from_word_is_straightened_in_the_fix():
     warnings = warnings_for("{% if status == “FINAL” %}y{% endif %}")
 
-    assert any("is a curly quote, which Word substitutes as you type" in w for w in warnings)
+    assert any("Curly quote from Word" in w for w in warnings)
+    assert any('Fix:    {% if status == "FINAL" %}' in w for w in warnings)
+    # The author still sees the curly quote they typed, on the Source and Found lines
     assert any("“" in w for w in warnings)
 
 
-def test_curly_single_quote_from_word_is_named():
+def test_curly_single_quote_from_word_is_straightened_in_the_fix():
     warnings = warnings_for("{% if status == ‘FINAL’ %}y{% endif %}")
 
-    assert any("is a curly quote, which Word substitutes as you type" in w for w in warnings)
+    assert any("Curly quote from Word" in w for w in warnings)
+    assert any("Fix:    {% if status == 'FINAL' %}" in w for w in warnings)
 
 
 def test_straight_quotes_are_not_reported():
@@ -43,7 +47,7 @@ def test_invalid_name_after_a_dot_reports_the_variable_name_guidance():
 
     warnings = warnings_for(text)
 
-    assert any("Invalid variable name in '{{ }}' or '{% %}' tag" in w for w in warnings)
+    assert any("Invalid variable name" in w for w in warnings)
 
 
 def test_docxtpl_paragraph_conditional_is_not_a_syntax_error():

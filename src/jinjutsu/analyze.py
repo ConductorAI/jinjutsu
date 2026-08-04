@@ -52,8 +52,9 @@ def analyze_jinja_template(template_text: str) -> TemplateReport:
         jinja_ast = JINJA_ENV.parse(normalize_docxtpl_prefixes(template_text))
     except TemplateSyntaxError as e:
         syntax_error = e
-    validation_errors = _validate(read_template(template_text), syntax_error)
-    variables, variable_conflict_errors = _build_variable_tree(jinja_ast)
+    text = read_template(template_text)
+    validation_errors = _validate(text, syntax_error)
+    variables, variable_conflict_errors = _build_variable_tree(jinja_ast, text.lines)
     return TemplateReport(context_schema(variables), validation_errors + variable_conflict_errors)
 
 
@@ -62,7 +63,7 @@ def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[str
     # A broken delimiter makes Jinja read the tag as plain text, so nothing after it can be trusted
     # Neither Jinja's own error nor the tag counts mean anything in this case, so hide those errors
     broken_delimiters = check_malformed_tags(text) + check_misplaced_statement_delimiters(text)
-    unbalanced_blocks = check_mismatched_tags(text.source)
+    unbalanced_blocks = check_mismatched_tags(text)
     # Jinja fails to parse an unbalanced block too, and the tag counts above already said it in plainer words
     defers_to_tag_counts = bool(unbalanced_blocks and error and should_defer_to_tag_counts(error))
 
@@ -80,13 +81,15 @@ def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[str
     return list(dict.fromkeys(warnings))
 
 
-def _build_variable_tree(ast: nodes.Template | None) -> tuple[dict[str, VariableNode], list[str]]:
+def _build_variable_tree(
+    ast: nodes.Template | None, lines: list[str]
+) -> tuple[dict[str, VariableNode], list[str]]:
     """Build the variable tree using nodes from a previously parsed template, and warn about issues it finds"""
     if not ast:
         return {}, []
 
-    walked = VariableTreeVisitor().walk(ast)
-    found = walked.warnings + check_no_objects_printed_directly(walked) + check_unknown_filters(ast)
+    walked = VariableTreeVisitor(lines).walk(ast)
+    found = walked.warnings + check_no_objects_printed_directly(walked, lines) + check_unknown_filters(ast, lines)
     warnings = list(dict.fromkeys(found))
 
     # Jinja decides which names the template actually asks for

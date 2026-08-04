@@ -16,14 +16,26 @@ def warning_to_string(
     title: str,
     found: str,
     fix: str,
-    line_no: int | None = None,
-    reason: str | None = None,
-    source_line: str | None = None,
+    reason: str,
+    line_no: int,
+    source_line: str,
 ) -> str:
-    """`line_no` is None for a count that is wrong across the whole template, with no one line to blame"""
-    parts = [title if line_no is None else f"Line {line_no}: {title}", f"  Found: {found}", f"  Fix:   {fix}"]
-    if reason:
-        parts.append(f"  Reason: {reason}")
-    if source_line:
-        parts.append(f"  {source_line}")
-    return "\n".join(parts)
+    return "\n".join(
+        [
+            f"Line {line_no}: {title}",
+            _labelled("Source", source_line),
+            _labelled("Found", found),
+            _labelled("Fix", fix),
+            _labelled("Reason", reason),
+        ]
+    )
+
+
+def read_source_line(lines: list[str], line_no: int) -> str:
+    """The line as the author wrote it, empty only if jinja blames a line past the end of the template"""
+    return lines[line_no - 1] if 0 < line_no <= len(lines) else ""
+
+
+def _labelled(label: str, value: str) -> str:
+    """Every label padded to the longest one, so the values line up in a column under the title"""
+    return f"  {f'{label}:':<8}{value}"

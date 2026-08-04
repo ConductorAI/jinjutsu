@@ -7,7 +7,7 @@ def test_builtin_method_field_is_reported_with_bracket_fix():
     warnings = warnings_for(text)
 
     assert any("Line 2: Field 'items' collides with a built-in method" in w for w in warnings)
-    assert any("Fix:   {{ r['items'] }}" in w for w in warnings)
+    assert any("Fix:    {{ r['items'] }}" in w for w in warnings)
 
 
 def test_list_method_field_is_reported_with_bracket_fix():
@@ -16,7 +16,7 @@ def test_list_method_field_is_reported_with_bracket_fix():
     warnings = warnings_for(text)
 
     assert any("Field 'count' collides with a built-in method" in w for w in warnings)
-    assert any("Fix:   {{ r['count'] }}" in w for w in warnings)
+    assert any("Fix:    {{ r['count'] }}" in w for w in warnings)
 
 
 def test_explicit_list_method_call_is_not_reported():
@@ -74,7 +74,7 @@ def test_two_different_dict_method_fields_in_a_tag_are_one_warning():
 
     assert len(warnings) == 1
     assert "Fields 'items' and 'values' collide with built-in methods" in warnings[0]
-    assert "Fix:   {{ a['items'] if flag else b['values'] }}" in warnings[0]
+    assert "Fix:    {{ a['items'] if flag else b['values'] }}" in warnings[0]
 
 
 def test_escaped_quote_inside_a_literal_does_not_leak_code_out_of_it():
@@ -107,7 +107,7 @@ def test_numeric_subtraction_leaves_a_real_syntax_error_intact():
     warnings = warnings_for(text)
 
     assert not any("hyphen" in w for w in warnings)
-    assert any("Error: expected token 'end of print statement'" in w for w in warnings)
+    assert any("expected token 'end of print statement'" in w for w in warnings)
 
 
 def test_hyphen_warning_does_not_hide_a_syntax_error():
@@ -138,13 +138,13 @@ def test_hyphenated_name_inside_a_statement_tag_is_flagged():
     warnings = warnings_for("{% if fiscal-year %}x{% endif %}")
 
     assert any("Variable name contains hyphen(s)" in w for w in warnings)
-    assert any("Fix:   fiscal_year" in w for w in warnings)
+    assert any("Fix:    fiscal_year" in w for w in warnings)
 
 
 def test_hyphenated_loop_source_is_flagged():
     warnings = warnings_for("{% for r in funding-rows %}{{ r.name }}{% endfor %}")
 
-    assert any("Found: funding-rows" in w for w in warnings)
+    assert any("Found:  funding-rows" in w for w in warnings)
 
 
 def test_hyphen_inside_a_string_literal_is_not_flagged():

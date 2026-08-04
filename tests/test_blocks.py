@@ -15,7 +15,7 @@ def test_cell_merge_outside_a_loop_is_reported():
     warnings = warnings_for(text)
 
     assert any("Line 2: Cell merge is not inside a loop" in w for w in warnings)
-    assert any("Found: {% vm %}" in w for w in warnings)
+    assert any("Found:  {% vm %}" in w for w in warnings)
 
 
 def test_horizontal_merge_outside_a_loop_is_reported():

@@ -7,10 +7,10 @@ Warnings:
 """
 
 from ..shapes import ListNode, ObjectNode, VariableNode, WalkResult, child_properties
-from ..utils.string_utils import warning_to_string
+from ..utils.string_utils import read_source_line, warning_to_string
 
 
-def check_no_objects_printed_directly(walked: WalkResult) -> list[str]:
+def check_no_objects_printed_directly(walked: WalkResult, lines: list[str]) -> list[str]:
     warnings = []
     for lineno, root, attrs in walked.printed:
         node = _lookup_path(walked.root, root, attrs)
@@ -36,6 +36,7 @@ def check_no_objects_printed_directly(walked: WalkResult) -> list[str]:
                     f"The template also reads fields from '{path}', so it receives {article}. "
                     f"Printing it renders {rendered} into the document."
                 ),
+                source_line=read_source_line(lines, lineno),
             )
         )
     return warnings

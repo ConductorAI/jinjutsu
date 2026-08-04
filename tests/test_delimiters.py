@@ -5,11 +5,10 @@ def test_warning_titles_render_jinja_delimiters_literally():
     assert any("Missing closing '%}' in statement tag" in w for w in warnings_for("{% oops }"))
     assert any("Missing closing '}}' in variable tag" in w for w in warnings_for("{{ oops }"))
     assert any(
-        "A single '=' only assigns, and only in '{% set %}'" in w
-        for w in warnings_for("{% if status = 'FINAL' %}y{% endif %}")
+        "Single '=' in a condition" in w for w in warnings_for("{% if status = 'FINAL' %}y{% endif %}")
     )
     assert any(
-        "Missing closing tag like '{% endfor %}' or '{% endif %}'" in w for w in warnings_for("{% set greeting %}Hello")
+        "Add {% endset %} to close the {% set %} above" in w for w in warnings_for("{% set greeting %}Hello")
     )
 
 
@@ -19,7 +18,7 @@ def test_transposed_statement_delimiter_is_reported_with_line_number():
     warnings = warnings_for(text)
 
     assert any("Line 2: Misplaced '%' in statement tag" in w for w in warnings)
-    assert any("Fix:   {% if sales_rep == true %}" in w for w in warnings)
+    assert any("Fix:    {% if sales_rep == true %}" in w for w in warnings)
 
 
 def test_extra_space_after_brace_is_reported_only_once():
@@ -37,7 +36,7 @@ def test_split_opening_brace_is_reported():
     warnings = warnings_for(text)
 
     assert any("Line 1: Extra space after '{' in variable tag" in w for w in warnings)
-    assert any("Fix:   {{ amount }}" in w for w in warnings)
+    assert any("Fix:    {{ amount }}" in w for w in warnings)
 
 
 def test_doubled_opening_delimiter_is_not_offered_a_third_brace():
@@ -54,7 +53,7 @@ def test_split_braces_on_both_ends_are_reported_with_one_fix():
 
     warnings = warnings_for(text)
 
-    assert any("Fix:   {{ amount }}" in w for w in warnings)
+    assert any("Fix:    {{ amount }}" in w for w in warnings)
 
 
 def test_extra_space_before_closing_brace_is_reported():
@@ -63,7 +62,7 @@ def test_extra_space_before_closing_brace_is_reported():
     warnings = warnings_for(text)
 
     assert any("Line 1: Extra space before '}' in tag" in w for w in warnings)
-    assert any("Fix:   {% if alpha %}" in w for w in warnings)
+    assert any("Fix:    {% if alpha %}" in w for w in warnings)
 
 
 def test_statement_tag_missing_opening_percent_is_reported():
@@ -123,4 +122,4 @@ def test_comment_on_the_same_line_does_not_hide_a_real_broken_delimiter():
 
     assert any("Missing closing '}}' in variable tag" in w for w in warnings)
     # The author sees the line as they wrote it, comment included, not the blanked copy we match against
-    assert any(w.endswith(text) for w in warnings)
+    assert any(f"Source: {text}" in w for w in warnings)
