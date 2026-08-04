@@ -1,8 +1,8 @@
 # Jinjutsu
 
-Read a Jinja template and answer two questions:
+Our package analyzes a Jinja template and answers two questions:
 
-1. **What data does this template need?** Not just the variable names, but the expected types for each variable. Jinja currently only returns a list of variable names.
+1. **What data does this template need?** Not just the variable names, but also the expected types for each variable.
 2. **What is wrong with it?** In plain language a non-programmer can act on, with a line number, the text that caused it, and a suggested fix.
 
 ## How does it compare with using Jinja directly?
