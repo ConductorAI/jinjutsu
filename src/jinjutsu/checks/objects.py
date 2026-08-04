@@ -6,11 +6,12 @@ Warnings:
 - '...' is a list and can't be printed directly      {{ rows }} where the template also reads row.name
 """
 
+from ..diagnostic import Diagnostic
 from ..shapes import ListNode, ObjectNode, VariableNode, WalkResult, child_properties
-from ..utils.string_utils import read_source_line, warning_to_string
+from ..utils.string_utils import read_source_line
 
 
-def check_no_objects_printed_directly(walked: WalkResult, lines: list[str]) -> list[str]:
+def check_no_objects_printed_directly(walked: WalkResult, lines: list[str]) -> list[Diagnostic]:
     warnings = []
     for lineno, root, attrs in walked.printed:
         node = _lookup_path(walked.root, root, attrs)
@@ -27,7 +28,7 @@ def check_no_objects_printed_directly(walked: WalkResult, lines: list[str]) -> l
         else:
             continue
         warnings.append(
-            warning_to_string(
+            Diagnostic(
                 line_no=lineno,
                 title=f"'{path}' is {article} and can't be printed directly",
                 found="{{ " + path + " }}",

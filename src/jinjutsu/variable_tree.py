@@ -10,6 +10,7 @@ from enum import Enum, auto
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
 
+from .diagnostic import Diagnostic
 from .shapes import (
     SCALAR_NODES,
     BooleanNode,
@@ -23,7 +24,7 @@ from .shapes import (
     WalkResult,
 )
 from .utils.ast_utils import NamePathSegment, jinja_local_variables, split_ast_object_path, strip_list_operations
-from .utils.string_utils import read_source_line, warning_to_string
+from .utils.string_utils import read_source_line
 
 # Where a node lives: a name in a dict, or the element of a list
 Slot = tuple[dict[str, VariableNode], str] | ListNode
@@ -306,7 +307,7 @@ class VariableTreeVisitor(NodeVisitor):
             return
         self._conflict_paths.add(path)
         self._warnings.append(
-            warning_to_string(
+            Diagnostic(
                 line_no=self._lineno,
                 title=f"'{path}' is used as both a value and an object",
                 found=f"{path}.{segment}",

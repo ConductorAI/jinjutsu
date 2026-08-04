@@ -7,7 +7,8 @@ Warnings:
 
 import re
 
-from ..utils.string_utils import read_source_line, warning_to_string
+from ..diagnostic import Diagnostic
+from ..utils.string_utils import read_source_line
 from ..utils.tag_utils import (
     STATEMENT_KEYWORD,
     Tag,
@@ -22,7 +23,7 @@ from ..utils.tag_utils import (
 PREFIXED_ELEMENTS = {"tr": "table row", "tc": "table cell", "p": "paragraph"}
 
 
-def check_mismatched_tags(text: TemplateText) -> list[str]:
+def check_mismatched_tags(text: TemplateText) -> list[Diagnostic]:
     warnings = []
 
     for opener, closer, title in [("for", "endfor", "loop"), ("if", "endif", "conditional")]:
@@ -32,7 +33,7 @@ def check_mismatched_tags(text: TemplateText) -> list[str]:
             continue
         line_no = _line_no_for_unbalanced_tag_error(text.source, open_positions, close_positions)
         warnings.append(
-            warning_to_string(
+            Diagnostic(
                 line_no=line_no,
                 title=f"Mismatched {title} tags",
                 found=(
@@ -51,7 +52,7 @@ def check_mismatched_tags(text: TemplateText) -> list[str]:
     return warnings
 
 
-def check_prefixed_tags_share_an_element(source_lines: list[str]) -> list[str]:
+def check_prefixed_tags_share_an_element(source_lines: list[str]) -> list[Diagnostic]:
     """
     Check for two docxtpl prefixed statement tags inside the one Word element they each claim
 
@@ -70,7 +71,7 @@ def check_prefixed_tags_share_an_element(source_lines: list[str]) -> list[str]:
                 if len(found) > 1:
                     # The survivor loses its partner, so jinja reports the leftover as an unknown tag
                     warnings.append(
-                        warning_to_string(
+                        Diagnostic(
                             line_no=line_no,
                             title=f"Two '{prefix}' tags in one {element_name}",
                             found=" and ".join(found[:2]),
@@ -86,7 +87,7 @@ def check_prefixed_tags_share_an_element(source_lines: list[str]) -> list[str]:
                 elif shares_with:
                     # Renders without complaint, so the loss only shows up by reading the finished document
                     warnings.append(
-                        warning_to_string(
+                        Diagnostic(
                             line_no=line_no,
                             title=f"'{prefix}' tag shares its {element_name} with other content",
                             found=f"{found[0]} beside '{shares_with}'",
@@ -102,7 +103,7 @@ def check_prefixed_tags_share_an_element(source_lines: list[str]) -> list[str]:
     return warnings
 
 
-def check_merge_tags_outside_loops(tags: list[Tag]) -> list[str]:
+def check_merge_tags_outside_loops(tags: list[Tag]) -> list[Diagnostic]:
     """
     Check for a docxtpl cell merge, {% vm %} or {% hm %}, used outside a loop
 
@@ -120,7 +121,7 @@ def check_merge_tags_outside_loops(tags: list[Tag]) -> list[str]:
                 depth = max(depth - 1, 0)
             elif not depth:
                 warnings.append(
-                    warning_to_string(
+                    Diagnostic(
                         line_no=line_num,
                         title="Cell merge is not inside a loop",
                         found="{% " + keyword + " %}",

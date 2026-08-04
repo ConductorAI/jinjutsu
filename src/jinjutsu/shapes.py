@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, NamedTuple
 
+from .diagnostic import Diagnostic
+
 
 @dataclass
 class _Node:
@@ -58,7 +60,7 @@ def child_properties(node: VariableNode) -> dict[str, VariableNode]:
 
 class TemplateReport(NamedTuple):
     schema: dict  # JSON Schema for the context the template needs, with no properties when it won't parse
-    diagnostics: list[str]  # every problem found, in the order a reader should see them
+    diagnostics: list[str]  # every problem found, formatted and ordered by the line it sits on
 
 
 class PrintedPath(NamedTuple):
@@ -76,6 +78,6 @@ class PrintedPath(NamedTuple):
 
 class WalkResult(NamedTuple):
     root: dict[str, VariableNode]  # the variable tree
-    warnings: list[str]  # a name the template uses as both a value and an object
+    warnings: list[Diagnostic]  # a name the template uses as both a value and an object
     conflict_paths: set[str]  # the paths behind those warnings, so a later check doesn't double up
     printed: list[PrintedPath]  # bare {{ x }} prints, judged once the tree is finished

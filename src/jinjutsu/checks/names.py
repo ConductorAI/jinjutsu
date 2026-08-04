@@ -11,7 +11,8 @@ from difflib import get_close_matches
 
 from jinja2 import Environment, nodes
 
-from ..utils.string_utils import read_source_line, warning_to_string
+from ..diagnostic import Diagnostic
+from ..utils.string_utils import read_source_line
 from ..utils.tag_utils import Tag, statement_keyword
 
 KNOWN_FILTERS = frozenset(Environment().filters)
@@ -31,7 +32,7 @@ LOOP_TAG = re.compile(statement_keyword("for"))
 CONDITION_TAG = re.compile(statement_keyword("if|elif"))
 
 
-def check_hyphenated_variables(tags: list[Tag]) -> list[str]:
+def check_hyphenated_variables(tags: list[Tag]) -> list[Diagnostic]:
     """
     Confirm intent for names containing hyphens, which jinja interprets as subtraction
 
@@ -43,7 +44,7 @@ def check_hyphenated_variables(tags: list[Tag]) -> list[str]:
         for match in HYPHENATED_NAME.finditer(_replace_string_literals_with_spaces(tag_text)):
             name = match.group()
             warnings.append(
-                warning_to_string(
+                Diagnostic(
                     line_no=line_num,
                     title="Variable name contains hyphen(s)",
                     found=name,
@@ -60,7 +61,7 @@ def check_hyphenated_variables(tags: list[Tag]) -> list[str]:
     return warnings
 
 
-def check_unknown_filters(ast: nodes.Template, lines: list[str]) -> list[str]:
+def check_unknown_filters(ast: nodes.Template, lines: list[str]) -> list[Diagnostic]:
     """
     Check for filter and test names jinja does not ship, which fail at render rather than at parse
 
@@ -74,7 +75,7 @@ def check_unknown_filters(ast: nodes.Template, lines: list[str]) -> list[str]:
             continue
         suggestion = get_close_matches(node.name, known, n=1, cutoff=SUGGESTION_CUTOFF)
         warnings.append(
-            warning_to_string(
+            Diagnostic(
                 line_no=node.lineno,
                 title=f"Unknown {kind} '{node.name}'",
                 found=f"| {node.name}" if kind == "filter" else f"is {node.name}",
@@ -93,7 +94,7 @@ def check_unknown_filters(ast: nodes.Template, lines: list[str]) -> list[str]:
     return warnings
 
 
-def check_builtin_method_attributes(tags: list[Tag]) -> list[str]:
+def check_builtin_method_attributes(tags: list[Tag]) -> list[Diagnostic]:
     """
     Check for fields read with dot syntax whose name is also a built-in dict or list method
 
@@ -115,7 +116,7 @@ def check_builtin_method_attributes(tags: list[Tag]) -> list[str]:
             headline = f"Fields {_join_quoted(fields)} collide with built-in methods"
             reads = f"Jinja reads {_join_quoted(f'.{field}' for field in fields)} as the value's own methods"
         warnings.append(
-            warning_to_string(
+            Diagnostic(
                 line_no=line_num,
                 title=headline,
                 found=tag_text,

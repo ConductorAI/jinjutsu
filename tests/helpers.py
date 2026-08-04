@@ -39,7 +39,7 @@ def variables_for(text: str):
 
 def conflicts_for(text: str) -> list[str]:
     "Just what the walk noticed, without the text checks analyze_jinja_template() merges in alongside"
-    return _build_variable_tree(_ast_for(text), text.split("\n"))[1]
+    return [str(found) for found in _build_variable_tree(_ast_for(text), text.split("\n"))[1]]
 
 
 def _ast_for(text: str):

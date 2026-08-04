@@ -10,11 +10,11 @@ Warnings:
 
 import re
 
-from ..utils.string_utils import warning_to_string
+from ..diagnostic import Diagnostic
 from ..utils.tag_utils import STATEMENT_KEYWORD, TemplateText
 
 
-def check_malformed_tags(text: TemplateText) -> list[str]:
+def check_malformed_tags(text: TemplateText) -> list[Diagnostic]:
     warnings = []
     for line_num, (line, scanned) in enumerate(zip(text.lines, text.source_lines, strict=True), start=1):
         # Check for { % instead of {%
@@ -23,7 +23,7 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
             if match:
                 malformed_tag = match.group(0)
                 warnings.append(
-                    warning_to_string(
+                    Diagnostic(
                         line_no=line_num,
                         title="Extra space after '{' in tag",
                         found=malformed_tag,
@@ -41,7 +41,7 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
             if match:
                 malformed_tag = match.group(0)
                 warnings.append(
-                    warning_to_string(
+                    Diagnostic(
                         line_no=line_num,
                         title="Extra space before '}' in tag",
                         found=malformed_tag,
@@ -58,7 +58,7 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
         if match := re.search(r"(?<!\{)\{\s+\{(?!\{).*?\}\s*\}", scanned):
             malformed_tag = match.group(0)
             warnings.append(
-                warning_to_string(
+                Diagnostic(
                     line_no=line_num,
                     title="Extra space after '{' in variable tag",
                     found=malformed_tag,
@@ -72,7 +72,7 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
         if match := re.search(r"\{\{[^}]*\}(?!\})", scanned):
             incomplete_tag = match.group(0)
             warnings.append(
-                warning_to_string(
+                Diagnostic(
                     line_no=line_num,
                     title="Missing closing '}}' in variable tag",
                     found=incomplete_tag,
@@ -93,7 +93,7 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
         ):
             incomplete_tag = match.group(0)
             warnings.append(
-                warning_to_string(
+                Diagnostic(
                     line_no=line_num,
                     title="Missing closing '%}' in statement tag",
                     found=incomplete_tag,
@@ -109,7 +109,7 @@ def check_malformed_tags(text: TemplateText) -> list[str]:
     return warnings
 
 
-def check_misplaced_statement_delimiters(text: TemplateText) -> list[str]:
+def check_misplaced_statement_delimiters(text: TemplateText) -> list[Diagnostic]:
     """Check for statement tags whose opening '%' is missing or out of position, like '{if% x %}'"""
     warnings = []
     for line_num, (line, scanned) in enumerate(zip(text.lines, text.source_lines, strict=True), start=1):
@@ -121,7 +121,7 @@ def check_misplaced_statement_delimiters(text: TemplateText) -> list[str]:
                 # '{ % if x %}' is the extra-space case, already reported by check_malformed_tags
                 continue
             warnings.append(
-                warning_to_string(
+                Diagnostic(
                     line_no=line_num,
                     title="Misplaced '%' in statement tag",
                     found=match.group(0),

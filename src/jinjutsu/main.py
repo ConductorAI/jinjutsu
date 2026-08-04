@@ -82,7 +82,7 @@ def _read(template: str) -> tuple[str, str] | str:
                 reason="A byte in it does not decode, so it is either binary or a legacy encoding",
             )
         except OSError as error:
-            return _error_to_string(template, problem=error.strerror or "Not readable", fix="Check its permissions")
+            return _error_to_string(template, problem=error.strerror or "Not readable", fix="Check file permissions")
     if any(marker in template for marker in TEMPLATE_MARKERS):
         return INLINE_LABEL, template
     if path.is_dir():
@@ -90,9 +90,8 @@ def _read(template: str) -> tuple[str, str] | str:
     return _error_to_string(template, problem="No such file", fix="Check the path, or quote the template text itself")
 
 
-def _error_to_string(template: str, *, problem: str, fix: str, reason: str | None = None) -> str:
-    """An unreadable argument, laid out the way warning_to_string lays out a warning"""
-    parts = [f"Error: {template}", f"  Problem: {problem}", f"  Fix:     {fix}"]
+def _error_to_string(filename: str, *, problem: str, fix: str, reason: str | None = None) -> str:
+    parts = [f"Error: {filename}", f"  Problem: {problem}", f"  Fix:     {fix}"]
     if reason:
         parts.append(f"  Reason:  {reason}")
     return "\n".join(parts)

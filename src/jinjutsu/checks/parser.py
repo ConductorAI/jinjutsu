@@ -12,7 +12,8 @@ import re
 
 from jinja2 import TemplateSyntaxError
 
-from ..utils.string_utils import read_source_line, warning_to_string
+from ..diagnostic import Diagnostic
+from ..utils.string_utils import read_source_line
 from ..utils.tag_utils import TAG_SHAPE
 
 BLOCK_BALANCE_ERROR = re.compile(r"unexpected end of template|unknown tag 'end\w+'", re.IGNORECASE)
@@ -40,7 +41,7 @@ BLOCK_OPENERS = {
 }
 
 
-def check_jinja_syntax(lines: list[str], error: TemplateSyntaxError | None) -> list[str]:
+def check_jinja_syntax(lines: list[str], error: TemplateSyntaxError | None) -> list[Diagnostic]:
     """Replace jinja's own parsing errors in more readable language when we recognise the message"""
     if not error:
         return []
@@ -74,7 +75,7 @@ def check_jinja_syntax(lines: list[str], error: TemplateSyntaxError | None) -> l
         fix = "Check the tag for typos, missing quotes, or a missing operand"
 
     return [
-        warning_to_string(
+        Diagnostic(
             line_no=error.lineno,
             title=title,
             found=tag,

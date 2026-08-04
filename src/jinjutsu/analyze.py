@@ -17,6 +17,7 @@ from .checks.delimiters import check_malformed_tags, check_misplaced_statement_d
 from .checks.names import check_builtin_method_attributes, check_hyphenated_variables, check_unknown_filters
 from .checks.objects import check_no_objects_printed_directly
 from .checks.parser import check_jinja_syntax, should_defer_to_tag_counts
+from .diagnostic import Diagnostic
 from .schema import context_schema
 from .shapes import TemplateReport, UnknownNode, VariableNode
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
@@ -55,10 +56,11 @@ def analyze_jinja_template(template_text: str) -> TemplateReport:
     text = read_template(template_text)
     validation_errors = _validate(text, syntax_error)
     variables, variable_conflict_errors = _build_variable_tree(jinja_ast, text.lines)
-    return TemplateReport(context_schema(variables), validation_errors + variable_conflict_errors)
+    diagnostics = sorted(validation_errors + variable_conflict_errors, key=lambda found: found.line_no)
+    return TemplateReport(context_schema(variables), [str(found) for found in diagnostics])
 
 
-def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[str]:
+def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[Diagnostic]:
     """Run every check, falling back to jinja's parser for what we don't cover"""
     # A broken delimiter makes Jinja read the tag as plain text, so nothing after it can be trusted
     # Neither Jinja's own error nor the tag counts mean anything in this case, so hide those errors
@@ -83,7 +85,7 @@ def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[str
 
 def _build_variable_tree(
     ast: nodes.Template | None, lines: list[str]
-) -> tuple[dict[str, VariableNode], list[str]]:
+) -> tuple[dict[str, VariableNode], list[Diagnostic]]:
     """Build the variable tree using nodes from a previously parsed template, and warn about issues it finds"""
     if not ast:
         return {}, []
