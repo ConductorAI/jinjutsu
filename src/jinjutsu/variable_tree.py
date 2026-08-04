@@ -10,7 +10,7 @@ from enum import Enum, auto
 from jinja2 import nodes
 from jinja2.visitor import NodeVisitor
 
-from .types import (
+from .shapes import (
     SCALAR_NODES,
     BooleanNode,
     ListNode,

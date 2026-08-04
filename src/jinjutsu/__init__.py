@@ -11,7 +11,7 @@ For a Word template, extract_docx_text(path) gives the text to analyze:
 """
 
 from .analyze import analyze_jinja_template
-from .types import TemplateReport
+from .shapes import TemplateReport
 from .utils.docx_utils import extract_docx_text
 
 __all__ = [

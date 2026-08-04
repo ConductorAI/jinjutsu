@@ -1,4 +1,4 @@
-from jinjutsu.types import BooleanNode, ListNode, StringNode
+from jinjutsu.shapes import BooleanNode, ListNode, StringNode
 
 from .helpers import conflicts_for, schema_for, variables_for, warnings_for
 

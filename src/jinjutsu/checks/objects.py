@@ -6,7 +6,7 @@ Warnings:
 - '...' is a list and can't be printed directly      {{ rows }} where the template also reads row.name
 """
 
-from ..types import ListNode, ObjectNode, VariableNode, WalkResult, child_properties
+from ..shapes import ListNode, ObjectNode, VariableNode, WalkResult, child_properties
 from ..utils.string_utils import warning_to_string
 
 

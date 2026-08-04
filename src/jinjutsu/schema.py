@@ -2,7 +2,7 @@
 The JSON Schema a report carries: built from the node union, and rendered as the tree the CLI prints
 """
 
-from .types import ListNode, ObjectNode, UnknownNode, VariableNode
+from .shapes import ListNode, ObjectNode, UnknownNode, VariableNode
 
 JSON_SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 TYPE_GAP = 2  # Spaces between the longest label and the type column

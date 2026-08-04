@@ -3,7 +3,7 @@ The one way in: hand it template text, get back what the template needs and what
 
 Everything else in this package is an internal step
 Parsing happens once here, then variable_tree.py walks the result and checks/ inspects the text
-The shapes both halves return are defined in types.py
+The shapes both halves return are defined in shapes.py
 """
 
 from jinja2 import Environment, TemplateAssertionError, TemplateSyntaxError, meta, nodes
@@ -18,7 +18,7 @@ from .checks.names import check_builtin_method_attributes, check_hyphenated_vari
 from .checks.objects import check_no_objects_printed_directly
 from .checks.parser import check_jinja_syntax, should_defer_to_tag_counts
 from .schema import context_schema
-from .types import TemplateReport, UnknownNode, VariableNode
+from .shapes import TemplateReport, UnknownNode, VariableNode
 from .utils.docxtpl_utils import normalize_docxtpl_prefixes
 from .utils.tag_utils import TemplateText, read_template
 from .variable_tree import VariableTreeVisitor

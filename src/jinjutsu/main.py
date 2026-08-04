@@ -14,7 +14,7 @@ from zipfile import BadZipFile
 
 from .analyze import analyze_jinja_template
 from .schema import render_tree
-from .types import TemplateReport
+from .shapes import TemplateReport
 from .utils.docx_utils import extract_docx_text
 
 INLINE_LABEL = "<string>"  # Stands in for the filename when the template came from the command line
