@@ -192,3 +192,42 @@ def test_the_same_bad_name_on_two_lines_warns_twice():
     text = "{{ a-b }}\n{{ a-b }}"
 
     assert len(warnings_for(text)) == 2, warnings_for(text)
+
+
+def test_a_collision_in_a_print_tag_says_the_method_renders():
+    warnings = warnings_for("{{ archive.keys }}")
+
+    assert any("renders the method instead of your value" in w for w in warnings)
+
+
+def test_a_collision_in_a_loop_says_the_render_fails_rather_than_renders():
+    warnings = warnings_for("{% for entry in archive.keys %}{{ entry }}{% endfor %}")
+
+    assert any("the render fails, leaving no document" in w for w in warnings)
+    assert not any("renders the method instead of your value" in w for w in warnings)
+
+
+def test_a_collision_in_a_condition_says_the_test_always_passes():
+    warnings = warnings_for("{% if archive.keys %}SEALED{% endif %}")
+
+    assert any("the test passes whatever your data holds" in w for w in warnings)
+    assert not any("renders the method instead of your value" in w for w in warnings)
+
+
+def test_an_elif_collision_is_described_as_a_condition():
+    warnings = warnings_for("{% if a %}x{% elif archive.keys %}y{% endif %}")
+
+    assert any("the test passes whatever your data holds" in w for w in warnings)
+
+
+def test_a_collision_in_a_set_tag_falls_back_to_the_printed_symptom():
+    warnings = warnings_for("{% set k = archive.keys %}{{ k }}")
+
+    assert any("renders the method instead of your value" in w for w in warnings)
+
+
+def test_two_collisions_in_one_loop_tag_read_as_plural():
+    warnings = warnings_for("{% for e in archive.keys if archive.values %}{{ e }}{% endfor %}")
+
+    assert any("Fields 'keys' and 'values' collide" in w for w in warnings)
+    assert any("iterate a method instead of your list" in w for w in warnings)

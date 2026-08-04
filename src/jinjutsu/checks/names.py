@@ -12,7 +12,7 @@ from difflib import get_close_matches
 from jinja2 import Environment, nodes
 
 from ..utils.string_utils import warning_to_string
-from ..utils.tag_utils import Tag
+from ..utils.tag_utils import Tag, statement_keyword
 
 KNOWN_FILTERS = frozenset(Environment().filters)
 KNOWN_TESTS = frozenset(Environment().tests)
@@ -26,6 +26,9 @@ BUILTIN_METHOD = (
     r"(?:append|clear|copy|count|extend|fromkeys|get|index|insert|items|keys|pop|popitem|remove"
     r"|reverse|setdefault|sort|update|values)"
 )
+
+LOOP_TAG = re.compile(statement_keyword("for"))
+CONDITION_TAG = re.compile(statement_keyword("if|elif"))
 
 
 def check_hyphenated_variables(tags: list[Tag]) -> list[str]:
@@ -106,27 +109,36 @@ def check_builtin_method_attributes(tags: list[Tag]) -> list[str]:
         fields = list(dict.fromkeys(match.group(1) for match in matches))
         if len(fields) == 1:
             headline = f"Field '{fields[0]}' collides with a built-in method"
-            reason = (
-                f"Jinja reads '.{fields[0]}' as the value's own method, so the document "
-                f"renders the method instead of your value."
-            )
+            reads = f"Jinja reads '.{fields[0]}' as the value's own method"
         else:
             headline = f"Fields {_join_quoted(fields)} collide with built-in methods"
-            reason = (
-                f"Jinja reads {_join_quoted(f'.{field}' for field in fields)} as the value's "
-                f"own methods, so the document renders the methods instead of your values."
-            )
+            reads = f"Jinja reads {_join_quoted(f'.{field}' for field in fields)} as the value's own methods"
         warnings.append(
             warning_to_string(
                 line_no=line_num,
                 title=headline,
                 found=tag_text,
                 fix=_bracket_matches(tag_text, matches),
-                reason=f"{reason} Use bracket syntax.",
+                reason=f"{reads}, {_collision_symptom(tag_text, plural=len(fields) > 1)}. Use bracket syntax.",
                 source_line=line,
             )
         )
     return warnings
+
+
+def _collision_symptom(tag_text: str, *, plural: bool) -> str:
+    """
+    What the author will actually see, which is a different failure in each kind of tag
+
+    A tag holds one loop and one test however many collisions it has, so only the printed wording turns plural
+    """
+    if LOOP_TAG.match(tag_text):
+        return "so the loop tries to iterate a method instead of your list and the render fails, leaving no document"
+    if CONDITION_TAG.match(tag_text):
+        return "so the test passes whatever your data holds, because a method always counts as true"
+    if plural:
+        return "so the document renders the methods instead of your values"
+    return "so the document renders the method instead of your value"
 
 
 def _bracket_matches(tag_text: str, matches: list[re.Match[str]]) -> str:
