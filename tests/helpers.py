@@ -11,7 +11,7 @@ DOCX_XMLNS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/m
 
 
 def warnings_for(text: str) -> list[str]:
-    return analyze_jinja_template(text).diagnostics
+    return [str(found) for found in analyze_jinja_template(text).diagnostics]
 
 
 def docx_bytes(body_xml: str, parts: dict[str, str] | None = None) -> bytes:

@@ -57,7 +57,7 @@ def analyze_jinja_template(template_text: str) -> TemplateReport:
     validation_errors = _validate(text, syntax_error)
     variables, variable_conflict_errors = _build_variable_tree(jinja_ast, text.lines)
     diagnostics = sorted(validation_errors + variable_conflict_errors, key=lambda found: found.line_no)
-    return TemplateReport(context_schema(variables), [str(found) for found in diagnostics])
+    return TemplateReport(context_schema(variables), diagnostics)
 
 
 def _validate(text: TemplateText, error: TemplateSyntaxError | None) -> list[Diagnostic]:

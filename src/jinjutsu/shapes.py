@@ -60,7 +60,7 @@ def child_properties(node: VariableNode) -> dict[str, VariableNode]:
 
 class TemplateReport(NamedTuple):
     schema: dict  # JSON Schema for the context the template needs, with no properties when it won't parse
-    diagnostics: list[str]  # every problem found, formatted and ordered by the line it sits on
+    diagnostics: list[Diagnostic]  # every problem found, ordered by the line it sits on; str() gives the formatted text
 
 
 class PrintedPath(NamedTuple):

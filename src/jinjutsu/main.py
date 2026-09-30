@@ -104,7 +104,7 @@ def _print_text(label: str, report: TemplateReport, sections: tuple[str, ...], *
     properties = report.schema["properties"]
     blocks = []
     if "warnings" in sections and report.diagnostics:
-        blocks.append(("warnings", "\n".join(report.diagnostics)))
+        blocks.append(("warnings", "\n".join(str(found) for found in report.diagnostics)))
     if "tree" in sections and properties:
         blocks.append(("tree", "\n".join(render_tree(properties))))
     if "schema" in sections:
@@ -122,7 +122,7 @@ def _print_text(label: str, report: TemplateReport, sections: tuple[str, ...], *
     else:
         # A lone --tree hid the warnings, so print them here rather than exiting 1 in silence
         empty = "No variables parsed from template. Warnings:"
-        print("\n".join([empty, "", *report.diagnostics]) if report.diagnostics else empty)
+        print("\n".join([empty, "", *map(str, report.diagnostics)]) if report.diagnostics else empty)
 
 
 if __name__ == "__main__":
