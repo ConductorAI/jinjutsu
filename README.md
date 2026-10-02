@@ -91,7 +91,7 @@ from jinjutsu import analyze_jinja_template
 report = analyze_jinja_template(template_text)
 
 report.schema       # dict — JSON Schema for the context the template expects
-report.diagnostics  # list[str] — formatted strings, ready to show the user
+report.diagnostics  # list[Diagnostic] — line_no, title, source_line, found, fix, reason; str() formats it
 ```
 
 The same analysis is available as a command, with an exit code a CI job or a pre-commit hook can read:
@@ -176,7 +176,7 @@ All fields will be optional by default, since the render can always succeed with
 
 ## Diagnostics
 
-`report.diagnostics` is a list of formatted strings you can show the user directly. Some examples of possible warnings:
+`report.diagnostics` is a list of `Diagnostic` objects, each with `line_no`, `title`, `source_line`, `found`, `fix`, and `reason` fields for programmatic use. `str(diagnostic)` formats one into text you can show the user directly:
 
 ```
 Line 2: Mismatched loop tags
