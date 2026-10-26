@@ -35,7 +35,8 @@ NUMERIC_OPERATORS = (nodes.Sub, nodes.Div, nodes.FloorDiv, nodes.Pow, nodes.Mul)
 # Concat and printf read the same as addition and modulo, so a numeric literal has to say which
 AMBIGUOUS_OPERATORS = (nodes.Add, nodes.Mod)
 # Strings compare lexicographically, so these only say number against a numeric literal
-ORDERED_COMPARISONS = ("lt", "lteq", "gt", "gteq")
+# A string never equals a number either, so == and != against one only make sense for numbers
+NUMERIC_COMPARISONS = ("lt", "lteq", "gt", "gteq", "eq", "ne")
 
 
 class LeafUse(Enum):
@@ -231,7 +232,7 @@ class VariableTreeVisitor(NodeVisitor):
     def _record_numeric_comparison(self, node: nodes.Node) -> bool:
         if not isinstance(node, nodes.Compare) or len(node.ops) != 1:
             return False
-        if node.ops[0].op not in ORDERED_COMPARISONS:
+        if node.ops[0].op not in NUMERIC_COMPARISONS:
             return False
         # Either side can hold the literal, so {% if 5 < count %} reads the same as {% if count > 5 %}
         for value, other in ((node.expr, node.ops[0].expr), (node.ops[0].expr, node.expr)):
