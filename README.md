@@ -156,12 +156,13 @@ All fields will be optional by default, since the render can always succeed with
 | `{% if x %}`                                | `boolean` — a guard, never rendered             |
 | `{% if x %}{{ x }}{% endif %}`              | `string` — rendering pins it                    |
 | `{% if x == true %}`                        | `boolean`                                       |
-| `{% if x == 'FINAL' %}`, `{% if x == 1 %}`  | `string`                                        |
+| `{% if x == 'FINAL' %}`                     | `string`                                        |
 | `{{ x - 1 }}`, `{{ x / 2 }}`, `{{ x ** 2 }}`, `{{ -x }}` | `number` since a string cannot survive this |
 | `{{ x * y }}`, `{{ x * 2 }}`, `{{ '-' * x }}` | `number` — `"a" * "b"` raises, so a side always counts |
 | `{{ x + 1 }}`, `{{ x % 2 }}`               | `number` — the literal says which meaning        |
 | `{{ x + y }}`, `{{ x % y }}`, `{{ x ~ y }}` | `string` — as likely concat or printf           |
 | `{% if x > 5 %}`, `{% if 5 < x %}`          | `number`                                        |
+| `{% if x == 1 %}`, `{% if x != 0 %}`        | `number` since a string never equals a number   |
 | `{% if x > y %}`, `{% if x > 'm' %}`        | `string` — strings compare lexicographically    |
 | `{% if x %}{{ x.title }}{% endif %}`        | `object` — the guard was an existence check     |
 | `{% for s in xs %}{{ s }}{% endfor %}`      | `xs`: list of strings                           |
@@ -337,7 +338,6 @@ Known limitations, ordered by most to least likely to be encountered:
 - **Nothing is marked required.** This is hard to determine. Also having all variables be optional is the best approach here philosophically since the template can still successfully render with missing variables.
 - **Default values aren't read.** `{{ name | default("friend") }}` parses and yields the right type, but there might be conflicting defaults for the same variable throughout the document.
 - **Filters aren't factored when deciding on the type.** This wouldn't be reliable for now since an object can have a lot of filters that imply different types, including custom filters defined in the user's Jinja environments
-- **`{% if x == 1 %}` reports `string`, but `{% if x > 1 %}` reports `number`.** The equality check gets ignored since it isn't as strong of a signal as the > comparison, and we go with number as the final type.
 - **`{{ pending-edits }}` warns even though it is valid subtraction.** Most likely that someone meant to type a variable with an underscore. Changing the text to `{{ pending - edits }}` with spacing clears it.
 - **Some checks are line-scoped.** A broken delimiter split across a newline might not be reported.
 - **No lint checks on spacing.** Docx extraction will produce enough random whitespace that style rules would fire constantly on valid templates.

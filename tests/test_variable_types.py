@@ -42,12 +42,10 @@ def test_quoted_comparison_against_true_is_string():
     assert variables["phase"] == StringNode()
 
 
-def test_comparison_against_number_is_string():
-    text = "{% if count == 1 %}x{% endif %}"
-
-    variables = variables_for(text)
-
-    assert variables["count"] == StringNode()
+def test_comparison_against_number_is_number():
+    # a string never equals a number, so these checks only work when the value is a number
+    assert variables_for("{% if count == 1 %}x{% endif %}") == {"count": NumberNode()}
+    assert variables_for("{% if count != 0 %}x{% endif %}") == {"count": NumberNode()}
 
 
 def test_boolean_comparison_on_nested_attribute_is_boolean():
